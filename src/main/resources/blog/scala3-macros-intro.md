@@ -1,7 +1,10 @@
 ---
-title: "Scala 3 Macros: Generate Code at Compile Time"
-excerpt: "How to use Scala 3's new macro system to eliminate boilerplate and catch errors before your program ever runs."
-tags: [Scala 3, Macros, Metaprogramming]
+title: Scala 3 Macros: Generate Code at Compile Time
+excerpt: How to use Scala 3's new macro system to eliminate boilerplate and catch errors before your program ever runs.
+tags:
+  - Scala 3
+  - Macros
+  - Metaprogramming
 publishedAt: "2024-10-02"
 readingMinutes: 12
 ---
@@ -26,7 +29,7 @@ inline def log(inline msg: String): Unit =
   println(s"[${compiletime.codeOf(msg)}] $msg")
 ```
 
-`inline` functions are expanded at call sites. The compiler substitutes the body directly — no function call overhead, and the body can inspect the static shape of its arguments.
+`inline` functions are expanded at call sites — no function call overhead, and the body can inspect the static shape of its arguments.
 
 `transparent inline` goes further: the return type is refined to the actual computed type at each call site:
 
@@ -48,7 +51,7 @@ inline def assertPositive(inline n: Int): Int =
   else compiletime.error("n must be positive at compile time")
 
 val ok  = assertPositive(5)   // compiles
-val bad = assertPositive(-1)  // compile error: n must be positive at compile time
+val bad = assertPositive(-1)  // error: n must be positive at compile time
 ```
 
 Zero runtime cost — the check happens entirely during compilation.
@@ -57,37 +60,25 @@ Zero runtime cost — the check happens entirely during compilation.
 
 For full macro power, Scala 3 provides **quotes** (`'{ ... }`) and **splices** (`${ ... }`):
 
-- A quote `'{ expr }` lifts an expression into a typed AST representation (`Expr[T]`)
-- A splice `${ mac }` runs a macro and inserts its result into the current expression
-
 ```scala
 import scala.quoted.*
 
 inline def debug[A](inline a: A): A = ${ debugImpl('a) }
 
 def debugImpl[A: Type](a: Expr[A])(using Quotes): Expr[A] =
-  '{ 
+  '{
     val result = $a
-    println(s"${${Expr(a.show)}} = $result")
+    println(s"${${ Expr(a.show) }} = $result")
     result
   }
 ```
 
-The `Quotes` context gives access to the full compiler API — you can inspect types, traverse the AST, and emit custom diagnostics.
-
 ## Deriving Type Classes
 
-The most practical use of macros in day-to-day Scala is type class derivation. Libraries like zio-json, circe and upickle use macros under the hood to generate codecs automatically:
+The most practical use of macros in day-to-day Scala is type class derivation:
 
 ```scala
 case class User(name: String, age: Int) derives JsonCodec
 ```
 
 The `derives` clause invokes a macro that inspects `User`'s fields at compile time and generates the codec — no reflection, no runtime overhead.
-
-## Practical Tips
-
-- Start with `inline` + `compiletime.error` before reaching for full quotes/splices
-- Use `summonInline` to resolve implicit instances at compile time
-- The `scala.quoted.staging` module lets you run macros in the REPL for experimentation
-- Error messages from macros should be actionable — tell the user exactly what to fix

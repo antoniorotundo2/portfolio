@@ -40,7 +40,7 @@ object MarkdownParser:
   private val renderer = HtmlRenderer.builder()
     .extensions(extensions)
     .build()
-    
+
   def parse(raw: String): (Map[String, List[String]], String) =
     val (yamlBlock, markdownContent) = raw.stripLeading() match
       case s if s.startsWith("---") =>
@@ -48,34 +48,33 @@ object MarkdownParser:
         val endIndex = withoutFirstDelim.indexOf("\n---")
         if endIndex >= 0 then
           val yaml = withoutFirstDelim.substring(0, endIndex).strip()
-          val md = withoutFirstDelim.substring(endIndex + 4).strip()
+          val md   = withoutFirstDelim.substring(endIndex + 4).strip()
           (yaml, md)
         else
           ("", s)
       case s => ("", s)
 
     val document = parser.parse(markdownContent)
-    val html = renderer.render(document)
+    val html     = renderer.render(document)
 
     val fm = if yamlBlock.nonEmpty then
       val yaml = Yaml()
       val data = yaml.load(yamlBlock) match
         case map: JMap[?, ?] => map.asInstanceOf[JMap[String, Any]]
-        case _ => java.util.Collections.emptyMap[String, Any]()
+        case _               => java.util.Collections.emptyMap[String, Any]()
       convertYamlMap(data)
     else Map.empty[String, List[String]]
 
     (fm, html)
 
   private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
-    println(s"[DEBUG V3] convertYamlMap chiamata con chiavi: ${data.keySet().asScala.mkString(", ")}")  // 👈 Log forzato  
     data.asScala.toMap.map { (key, value) =>
       val list = Option(value) match
-        case None => List.empty[String]
+        case None    => List.empty[String]
         case Some(v) =>
           v match
             case s: String            => List(s)
-            case l: java.util.List[_] => l.asScala.toList.map(_.toString)
+            case l: java.util.List[?] => l.asScala.toList.map(_.toString)
             case other                => List(other.toString)
       key -> list
     }
@@ -96,22 +95,20 @@ object ResourceLoader:
   def loadDirectory(dirName: String): Task[List[(String, String)]] =
     ZIO.attemptBlocking {
       val url = getClass.getResource(s"/$dirName")
-      if (url == null) throw new RuntimeException(s"$dirName/ directory not found in classpath")
+      if url == null then throw new RuntimeException(s"$dirName/ directory not found in classpath")
 
-      val uri = url.toURI
+      val uri   = url.toURI
       var jarFs: Option[FileSystem] = None
 
-      try {
-        val dir: Path = uri.getScheme match {
+      try
+        val dir: Path = uri.getScheme match
           case "file" => Paths.get(uri)
-          case "jar" =>
-            val env = emptyMap[String, Any]()
-            val fs  = FileSystems.newFileSystem(uri, env)
+          case "jar"  =>
+            val fs = FileSystems.newFileSystem(uri, emptyMap[String, Any]())
             jarFs = Some(fs)
             fs.getPath(s"/$dirName")
-          case other =>
+          case other  =>
             throw new RuntimeException(s"Unsupported URI scheme: $other")
-        }
 
         Files.list(dir).iterator().asScala
           .filter(_.toString.endsWith(".md"))
@@ -121,9 +118,8 @@ object ResourceLoader:
             slug -> raw
           }
           .toList
-      } finally {
+      finally
         jarFs.foreach(_.close())
-      }
     }
 
 // ── Post loader ───────────────────────────────────────────────────────────────
@@ -160,9 +156,11 @@ object ProfileLoader:
   def load: Task[Profile] =
     ResourceLoader.loadDirectory("home").flatMap { files =>
       files.headOption match
-        case Some((_, raw)) => ZIO.fromOption(parseProfile(raw))
-          .orElseFail(new RuntimeException("Failed to parse profile"))
-        case None => ZIO.fail(new RuntimeException("profile.md not found"))
+        case Some((_, raw)) =>
+          ZIO.fromOption(parseProfile(raw))
+            .orElseFail(new RuntimeException("Failed to parse profile"))
+        case None =>
+          ZIO.fail(new RuntimeException("profile.md not found in home/"))
     }
 
   private def parseProfile(raw: String): Option[Profile] =
@@ -187,7 +185,7 @@ object ProfileLoader:
     MarkdownParser.frontList(fm, "socials").flatMap { entry =>
       entry.split("\\|").toList match
         case label :: url :: icon :: Nil => Some(SocialLink(label.trim, url.trim, icon.trim))
-        case _ => None
+        case _                           => None
     }
 
 // ── Project loader ────────────────────────────────────────────────────────────
@@ -236,7 +234,7 @@ object PortfolioServiceLive:
   private final class Live(
     profile: Profile,
     projects: List[Project],
-    posts: List[BlogPost]
+    posts: List[BlogPost],
   ) extends PortfolioService:
     def getProfile: UIO[Profile]                         = ZIO.succeed(profile)
     def getProjects: UIO[List[Project]]                  = ZIO.succeed(projects)

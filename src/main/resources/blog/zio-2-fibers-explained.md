@@ -1,7 +1,11 @@
 ---
-title: "ZIO 2 Fibers: Concurrency Without the Pain"
-excerpt: "A deep dive into ZIO fibers, structured concurrency, and why they make concurrent code actually maintainable."
-tags: [Scala, ZIO, Concurrency, Fibers]
+title: ZIO 2 Fibers: Concurrency Without the Pain
+excerpt: A deep dive into ZIO fibers, structured concurrency, and why they make concurrent code actually maintainable.
+tags:
+  - Scala
+  - ZIO
+  - Concurrency
+  - Fibers
 publishedAt: "2024-11-15"
 readingMinutes: 8
 ---

@@ -5,23 +5,20 @@ import zio.json.*
 // ── Project ──────────────────────────────────────────────────────────────────
 
 enum ProjectStatus:
-  case Active, Completed, Archived
+  case Active, Archived, WIP
 
 object ProjectStatus:
+  given JsonCodec[ProjectStatus] = JsonCodec.string.transform(
+    s => ProjectStatus.valueOf(s),
+    _.toString,
+  )
+
   def fromString(s: String): Option[ProjectStatus] =
-    s.toLowerCase match
-      case "active"    => Some(Active)
-      case "completed" => Some(Completed)
-      case "archived"  => Some(Archived)
-      case _           => None
-
-  given JsonEncoder[ProjectStatus] =
-    JsonEncoder[String].contramap(_.toString.toLowerCase)
-
-  given JsonDecoder[ProjectStatus] =
-    JsonDecoder[String].mapOrFail(s =>
-      fromString(s).toRight(s"Invalid ProjectStatus: $s")
-    )
+    s.trim.toLowerCase match
+      case "active"   => Some(Active)
+      case "archived" => Some(Archived)
+      case "wip"      => Some(WIP)
+      case _          => None
 
 case class Project(
   id: String,
@@ -42,9 +39,9 @@ case class BlogPost(
   slug: String,
   title: String,
   excerpt: String,
-  content: String,         // HTML renderizzato
+  content: String,
   tags: List[String],
-  publishedAt: String,     // ISO date string
+  publishedAt: String,
   readingMinutes: Int,
 ) derives JsonCodec
 

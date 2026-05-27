@@ -1,9 +1,7 @@
-val zioVersion         = "2.1.9"
-val zioHttpVersion     = "3.0.1"
-val zioJsonVersion     = "0.7.3"
-val scalatagsVersion   = "0.13.1"
-val commonmarkVersion  = "0.28.0"
-val snakeyamlVersion   = "2.6"
+val zioVersion       = "2.1.9"
+val zioHttpVersion   = "3.0.1"
+val zioJsonVersion   = "0.7.3"
+val scalatagsVersion = "0.13.1"
 
 ThisBuild / scalaVersion := "3.4.2"
 ThisBuild / organization := "dev.portfolio"
@@ -22,12 +20,12 @@ lazy val root = (project in file("."))
       "dev.zio" %% "zio-json"    % zioJsonVersion,
       // ScalaTags for HTML DSL
       "com.lihaoyi" %% "scalatags" % scalatagsVersion,
-      // CommonMark (Markdown parsing)
-      "org.commonmark" % "commonmark"                       % commonmarkVersion,
-      "org.commonmark" % "commonmark-ext-gfm-tables"        % commonmarkVersion,
-      "org.commonmark" % "commonmark-ext-gfm-strikethrough" % commonmarkVersion,
-      // YAML parsing (per front matter)
-      "org.yaml" % "snakeyaml" % snakeyamlVersion,
+      // Markdown rendering
+      "org.commonmark" % "commonmark"                    % "0.22.0",
+      "org.commonmark" % "commonmark-ext-gfm-tables"     % "0.22.0",
+      "org.commonmark" % "commonmark-ext-gfm-strikethrough" % "0.22.0",
+      // YAML front matter parsing
+      "org.yaml" % "snakeyaml" % "2.2",
       // Logging
       "dev.zio" %% "zio-logging"              % "2.3.0",
       "dev.zio" %% "zio-logging-slf4j-bridge" % "2.3.0",
