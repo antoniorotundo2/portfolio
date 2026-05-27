@@ -11,6 +11,10 @@ import zio.*
 
 import java.util
 import scala.jdk.CollectionConverters.*
+//
+import java.nio.file.{FileSystem, FileSystems, Path, Paths}
+import java.io.IOException
+import java.util.Collections
 
 // ── Algebra ───────────────────────────────────────────────────────────────────
 
@@ -67,15 +71,26 @@ object MarkdownParser:
 object PostLoader:
 
   // Load all posts from classpath resources/posts/*.md
-  def loadAll: Task[List[BlogPost]] =
-    ZIO.attemptBlocking {
-      val cl  = Thread.currentThread().getContextClassLoader
-      val url = cl.getResource("posts")
-      if url == null then
-        throw new RuntimeException("posts/ directory not found in classpath")
+  val uri = url.toURI
+  val dir: Path = uri.getScheme match {
+    case "file" =>
+      Paths.get(uri)
+
+    case "jar" =>
+      // For a JAR resource, create a virtual filesystem and get the path
+      val env = Collections.emptyMap[String, Any]()
+      val fs: FileSystem = FileSystems.newFileSystem(uri, env)
+      try {
+        fs.getPath("/posts")
+      } finally {
+        fs.close()
+      }
+
+    case other =>
+      throw new RuntimeException(s"Unsupported URI scheme: $other")
+  }
 
       // List .md files from the directory
-      val dir   = java.nio.file.Paths.get(url.toURI)
       val files = java.nio.file.Files.list(dir).iterator().asScala
         .filter(_.toString.endsWith(".md"))
         .toList
