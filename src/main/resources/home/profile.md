@@ -8,9 +8,8 @@ bio: >
 location: Rimini, IT
 email: antonio@rotundo.dev
 skills: [Scala, ZIO, Akka, Kafka, PostgreSQL, Kubernetes, Rust, TypeScript, Redis, gRPC]
-socials: [
-  "GitHub|https://github.com|github",
-  "LinkedIn|https://linkedin.com|linkedin",
-  "Twitter|https://twitter.com|twitter"
-]
+socials:
+  - GitHub|https://github.com|github
+  - LinkedIn|https://linkedin.com|linkedin
+  - Twitter|https://twitter.com|twitter
 ---
