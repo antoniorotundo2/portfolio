@@ -9,12 +9,11 @@ import com.vladsch.flexmark.ext.yaml.front.matter.{AbstractYamlFrontMatterVisito
 import com.vladsch.flexmark.util.data.MutableDataSet
 import zio.*
 
-import java.util
 import scala.jdk.CollectionConverters.*
-//
-import java.nio.file.{FileSystem, FileSystems, Files, Path, Paths}
-import java.io.IOException
-import java.util.Collections
+
+import java.nio.file.{FileSystems, Files, Path, Paths}
+import java.util.Arrays
+import java.util.Collections.emptyMap
 
 // ── Algebra ───────────────────────────────────────────────────────────────────
 
@@ -33,7 +32,7 @@ object MarkdownParser:
     val opts = MutableDataSet()
     opts.set(
       Parser.EXTENSIONS,
-      util.Arrays.asList(
+      Arrays.asList(
         TablesExtension.create(),
         StrikethroughExtension.create(),
         YamlFrontMatterExtension.create(),
@@ -77,6 +76,7 @@ object PostLoader:
     val uri = url.toURI
     var jarFs: Option[FileSystem] = None
 
+  try {
     val dir: Path = uri.getScheme match {
       case "file" => Paths.get(uri)
       case "jar" =>
@@ -88,20 +88,19 @@ object PostLoader:
         throw new RuntimeException(s"Unsupported URI scheme: $other")
     }
 
-    try {
-      val files = Files.list(dir).iterator().asScala
-        .filter(_.toString.endsWith(".md"))
-        .toList
+    val files = Files.list(dir).iterator().asScala
+      .filter(_.toString.endsWith(".md"))
+      .toList
 
-      files.flatMap { path =>
-        val slug = path.getFileName.toString.stripSuffix(".md")
-        val raw  = Files.readString(path)
-        parsePost(slug, raw)
-      }.sortBy(_.publishedAt).reverse
-    } finally {
-      jarFs.foreach(_.close())
-    }
+    files.flatMap { path =>
+      val slug = path.getFileName.toString.stripSuffix(".md")
+      val raw  = Files.readString(path)
+      parsePost(slug, raw)
+    }.sortBy(_.publishedAt).reverse
+  } finally {
+    jarFs.foreach(_.close())
   }
+}
 
   private def parsePost(slug: String, raw: String): Option[BlogPost] =
     val (fm, html) = MarkdownParser.parse(raw)
