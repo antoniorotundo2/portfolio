@@ -11,7 +11,7 @@ import zio.*
 
 import scala.jdk.CollectionConverters.*
 
-import java.nio.file.{FileSystems, Files, Path, Paths}
+import java.nio.file.{FileSystem, FileSystems, Files, Path, Paths}
 import java.util.Arrays
 import java.util.Collections.emptyMap
 
@@ -76,31 +76,31 @@ object PostLoader:
     val uri = url.toURI
     var jarFs: Option[FileSystem] = None
 
-  try {
-    val dir: Path = uri.getScheme match {
-      case "file" => Paths.get(uri)
-      case "jar" =>
-        val env = Collections.emptyMap[String, Any]()
-        val fs  = FileSystems.newFileSystem(uri, env)
-        jarFs = Some(fs)
-        fs.getPath("/posts")
-      case other =>
-        throw new RuntimeException(s"Unsupported URI scheme: $other")
+    try {
+      val dir: Path = uri.getScheme match {
+        case "file" => Paths.get(uri)
+        case "jar" =>
+          val env = emptyMap[String, Any]()
+          val fs  = FileSystems.newFileSystem(uri, env)
+          jarFs = Some(fs)
+          fs.getPath("/posts")
+        case other =>
+          throw new RuntimeException(s"Unsupported URI scheme: $other")
+      }
+
+      val files = Files.list(dir).iterator().asScala
+        .filter(_.toString.endsWith(".md"))
+        .toList
+
+      files.flatMap { path =>
+        val slug = path.getFileName.toString.stripSuffix(".md")
+        val raw  = Files.readString(path)
+        parsePost(slug, raw)
+      }.sortBy(_.publishedAt).reverse
+    } finally {
+      jarFs.foreach(_.close())
     }
-
-    val files = Files.list(dir).iterator().asScala
-      .filter(_.toString.endsWith(".md"))
-      .toList
-
-    files.flatMap { path =>
-      val slug = path.getFileName.toString.stripSuffix(".md")
-      val raw  = Files.readString(path)
-      parsePost(slug, raw)
-    }.sortBy(_.publishedAt).reverse
-  } finally {
-    jarFs.foreach(_.close())
   }
-}
 
   private def parsePost(slug: String, raw: String): Option[BlogPost] =
     val (fm, html) = MarkdownParser.parse(raw)
