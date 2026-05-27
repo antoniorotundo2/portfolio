@@ -54,7 +54,7 @@ object MarkdownParser:
     fm.get(key).flatMap(_.headOption).map(_.stripPrefix("\"").stripSuffix("\""))
     
   def frontMultiline(fm: Map[String, List[String]], key: String): Option[String] =
-  fm.get(key).map(_.mkString(" ").stripPrefix("\"").stripSuffix("\""))
+    fm.get(key).map(_.mkString(" ").stripPrefix("\"").stripSuffix("\""))
 
   def frontList(fm: Map[String, List[String]], key: String): List[String] =
     fm.get(key).getOrElse(Nil).map(_.stripPrefix("\"").stripSuffix("\""))
@@ -157,10 +157,19 @@ object ProfileLoader:
     )
 
   private def parseSocials(fm: Map[String, List[String]]): List[SocialLink] =
-    MarkdownParser.frontList(fm, "socials").flatMap { entry =>
-      entry.split("\\|").toList match
-        case label :: url :: icon :: Nil => Some(SocialLink(label, url, icon))
-        case _ => None
+    val raw = MarkdownParser.frontList(fm, "socials")
+    // Log temporaneo - guarda i log di Render dopo il deploy
+    println(s"[DEBUG SOCIALS] Raw from Markdown: $raw")
+    raw.flatMap { entry =>
+      val parts = entry.split("\\|").map(_.trim).toList
+      println(s"[DEBUG SOCIALS] Parts for '$entry': $parts")
+      parts match
+        case label :: url :: icon :: Nil => 
+          println(s"[DEBUG SOCIALS] ✅ Parsed: $label")
+          Some(SocialLink(label, url, icon))
+        case _ => 
+          println(s"[DEBUG SOCIALS] ❌ Failed to parse: '$entry'")
+          None
     }
 
 // ── Project loader ────────────────────────────────────────────────────────────
