@@ -58,10 +58,13 @@ object MarkdownParser:
     val html     = renderer.render(document)
 
     val fm = if yamlBlock.nonEmpty then
-      val yaml = Yaml()
-      val data = yaml.load(yamlBlock) match
-        case map: JMap[?, ?] => map.asInstanceOf[JMap[String, Any]]
-        case _               => java.util.Collections.emptyMap[String, Any]()
+      val yaml   = Yaml()
+      val loaded = yaml.load[Any](yamlBlock)
+      val data: JMap[String, Any] =
+        if loaded.isInstanceOf[java.util.Map[?, ?]] then
+          loaded.asInstanceOf[JMap[String, Any]]
+        else
+          java.util.Collections.emptyMap[String, Any]()
       convertYamlMap(data)
     else Map.empty[String, List[String]]
 
@@ -154,13 +157,16 @@ object PostLoader:
 object ProfileLoader:
 
   def load: Task[Profile] =
-    ResourceLoader.loadDirectory("home").flatMap { files =>
-      files.headOption match
-        case Some((_, raw)) =>
-          ZIO.fromOption(parseProfile(raw))
-            .orElseFail(new RuntimeException("Failed to parse profile"))
-        case None =>
-          ZIO.fail(new RuntimeException("profile.md not found in home/"))
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/home/profile.md")
+      if stream == null then
+        throw new RuntimeException("home/profile.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parseProfile(raw))
+        .orElseFail(new RuntimeException(
+          "Failed to parse home/profile.md: check required frontmatter fields (name, role, bio, location, email)"
+        ))
     }
 
   private def parseProfile(raw: String): Option[Profile] =
