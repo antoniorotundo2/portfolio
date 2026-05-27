@@ -68,60 +68,41 @@ object MarkdownParser:
 
 // ── Post loader ───────────────────────────────────────────────────────────────
 
-object PostLoader:
+def loadAll: Task[List[BlogPost]] = ZIO.attemptBlocking {
+  val url = getClass.getResource("/posts")
+  if (url == null) throw new RuntimeException("posts/ directory not found in classpath")
 
-  // Load all posts from classpath resources/posts/*.md
-  def loadAll: Task[List[BlogPost]] = ZIO.attemptBlocking {
+  val uri = url.toURI
+  var jarFs: Option[FileSystem] = None  // per chiudere il filesystem alla fine
 
-    val url = getClass.getResource("/posts")
-    if url == null then throw new RuntimeException("posts/ directory not found in classpath")
+  val dir: Path = uri.getScheme match {
+    case "file" =>
+      Paths.get(uri)
 
-    val uri = url.toURI
+    case "jar" =>
+      val env = Collections.emptyMap[String, Any]()
+      val fs = FileSystems.newFileSystem(uri, env)
+      jarFs = Some(fs)                  // conserva il riferimento
+      fs.getPath("/posts")
 
-    // Obtain a Path to the "posts" directory, whether in a JAR or on the filesystem
-    val dir: Path = uri.getScheme match {
-      case "file" => Paths.get(uri)
-      case "jar"  =>
-        val env = Collections.emptyMap[String, Any]()
-        val fs  = FileSystems.newFileSystem(uri, env)
-        try {
-          fs.getPath("/posts")
-        } finally {
-          fs.close()
-        }
-      case other =>
-        throw new RuntimeException(s"Unsupported URI scheme: $other")
-    }
+    case other =>
+      throw new RuntimeException(s"Unsupported URI scheme: $other")
+  }
 
-    // List .md files
+  try {
     val files = Files.list(dir).iterator().asScala
       .filter(_.toString.endsWith(".md"))
       .toList
 
-    // Parse each file and collect the results
     files.flatMap { path =>
       val slug = path.getFileName.toString.stripSuffix(".md")
       val raw  = Files.readString(path)
       parsePost(slug, raw)
     }.sortBy(_.publishedAt).reverse
+  } finally {
+    jarFs.foreach(_.close())  // chiude solo se era un JAR
   }
-
-  private def parsePost(slug: String, raw: String): Option[BlogPost] =
-    val (fm, html) = MarkdownParser.parse(raw)
-    for
-      title   <- MarkdownParser.frontString(fm, "title")
-      excerpt <- MarkdownParser.frontString(fm, "excerpt")
-      date    <- MarkdownParser.frontString(fm, "publishedAt")
-    yield BlogPost(
-      id             = slug,
-      slug           = slug,
-      title          = title,
-      excerpt        = excerpt,
-      content        = html,
-      tags           = MarkdownParser.frontList(fm, "tags"),
-      publishedAt    = date,
-      readingMinutes = MarkdownParser.frontInt(fm, "readingMinutes", 5),
-    )
+}
 
 // ── Live implementation ───────────────────────────────────────────────────────
 
