@@ -32,10 +32,10 @@ object Layout:
         span(cls := "logo-bracket")("]"),
       ),
       div(cls := "nav-links")(
-        a(href := "/",        cls := s"nav-link ${if currentPath == "/"        then "active" else ""}")("home"),
-        a(href := "/projects",cls := s"nav-link ${if currentPath == "/projects" then "active" else ""}")("projects"),
-        a(href := "/blog",    cls := s"nav-link ${if currentPath == "/blog"    then "active" else ""}")("blog"),
-        a(href := "/#contact",cls := "nav-link nav-cta")("contact"),
+        a(href := "/",         cls := s"nav-link ${if currentPath == "/"         then "active" else ""}")("home"),
+        a(href := "/projects", cls := s"nav-link ${if currentPath == "/projects" then "active" else ""}")("projects"),
+        a(href := "/blog",     cls := s"nav-link ${if currentPath == "/blog"     then "active" else ""}")("blog"),
+        a(href := "/#contact", cls := "nav-link nav-cta")("contact"),
       ),
     )
 
@@ -102,7 +102,7 @@ object HomeView:
           a(href := "/projects", cls := "see-all")("see all →"),
         ),
         div(cls := "projects-grid")(
-          featuredProjects.take(3).map(p => ProjectCard.mini(p))*
+          featuredProjects.take(3).map(proj => ProjectCard.mini(proj))*
         ),
       ),
 
@@ -113,7 +113,7 @@ object HomeView:
           a(href := "/blog", cls := "see-all")("see all →"),
         ),
         div(cls := "posts-list")(
-          latestPosts.take(3).map(BlogCard.mini)*
+          latestPosts.take(3).map(post => BlogCard.mini(post))*
         ),
       ),
 
@@ -133,22 +133,21 @@ object HomeView:
       ),
     )
 
-// ── Projects page ─────────────────────────────────────────────────────────────
+// ── Projects ──────────────────────────────────────────────────────────────────
 
 object ProjectCard:
-  def mini(p: Project) =
+  def mini(proj: Project) =
+    val links = proj.githubUrl.map(u => a(href := u, cls := "card-link", target := "_blank")("github ↗")).toSeq ++
+                proj.liveUrl.map(u  => a(href := u, cls := "card-link card-link-live", target := "_blank")("live ↗")).toSeq
     article(cls := "project-card")(
       div(cls := "card-top")(
-        span(cls := s"status-dot status-${p.status.toString.toLowerCase}"),
-        span(cls := "card-year")(p.year.toString),
+        span(cls := s"status-dot status-${proj.status.toString.toLowerCase}"),
+        span(cls := "card-year")(proj.year.toString),
       ),
-      h3(cls := "card-title")(p.title),
-      p(cls  := "card-desc")(p.description),
-      div(cls := "card-tags")(p.tags.map(t => span(cls := "tag")(t))*),
-      div(cls := "card-links")(
-        p.githubUrl.map(u => a(href := u, cls := "card-link", target := "_blank")("github ↗")).toSeq*,
-        p.liveUrl.map(u   => a(href := u, cls := "card-link card-link-live", target := "_blank")("live ↗")).toSeq*,
-      ),
+      h3(cls := "card-title")(proj.title),
+      p(cls  := "card-desc")(proj.description),
+      div(cls := "card-tags")(proj.tags.map(t => span(cls := "tag")(t))*),
+      div(cls := "card-links")(links*),
     )
 
 object ProjectsView:
@@ -161,24 +160,24 @@ object ProjectsView:
       ),
       section(cls := "projects-full")(
         div(cls := "projects-grid projects-grid-full")(
-          projects.map(ProjectCard.mini)*
+          projects.map(proj => ProjectCard.mini(proj))*
         ),
       ),
     )
 
-// ── Blog pages ────────────────────────────────────────────────────────────────
+// ── Blog ─────────────────────────────────────────────────────────────────────
 
 object BlogCard:
-  def mini(p: BlogPost) =
+  def mini(post: BlogPost) =
     article(cls := "post-row")(
       div(cls := "post-meta")(
-        time(cls := "post-date")(p.publishedAt),
-        span(cls := "post-read")(s"${p.readingMinutes} min"),
+        time(cls := "post-date")(post.publishedAt),
+        span(cls := "post-read")(s"${post.readingMinutes} min"),
       ),
       div(cls := "post-body")(
-        a(href := s"/blog/${p.slug}", cls := "post-title")(p.title),
-        p(cls  := "post-excerpt")(p.excerpt),
-        div(cls := "post-tags")(p.tags.map(t => span(cls := "tag")(t))*),
+        a(href := s"/blog/${post.slug}", cls := "post-title")(post.title),
+        p(cls  := "post-excerpt")(post.excerpt),
+        div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*),
       ),
     )
 
@@ -191,7 +190,7 @@ object BlogView:
         p(cls  := "page-subtitle")("Notes on Scala, ZIO, distributed systems, and software craft."),
       ),
       section(cls := "blog-list")(
-        posts.map(BlogCard.mini)*
+        posts.map(post => BlogCard.mini(post))*
       ),
     )
 
@@ -209,7 +208,7 @@ object BlogPostView:
           div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*),
         ),
         div(cls := "post-content")(raw(post.content)),
-        footer(cls := "post-footer")(
+        tag("footer")(cls := "post-footer")(
           a(href := "/blog", cls := "back-link")("← back to blog"),
         ),
       ),
