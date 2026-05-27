@@ -24,7 +24,6 @@ lazy val root = (project in file("."))
       "com.lihaoyi" %% "scalatags" % scalatagsVersion,
       // CommonMark (Markdown parsing)
       "org.commonmark" % "commonmark"                       % commonmarkVersion,
-      "org.commonmark" % "commonmark-ext-yaml-front-matter" % commonmarkVersion,
       "org.commonmark" % "commonmark-ext-gfm-tables"        % commonmarkVersion,
       "org.commonmark" % "commonmark-ext-gfm-strikethrough" % commonmarkVersion,
       // YAML parsing (per front matter)

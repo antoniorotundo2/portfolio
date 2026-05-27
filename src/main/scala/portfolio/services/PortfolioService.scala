@@ -22,7 +22,6 @@ object MarkdownParser:
 
   import org.commonmark.parser.Parser
   import org.commonmark.renderer.html.HtmlRenderer
-  import org.commonmark.ext.front.matter.YamlFrontMatterExtension
   import org.commonmark.ext.gfm.tables.TablesExtension
   import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
   import org.yaml.snakeyaml.Yaml
@@ -32,7 +31,6 @@ object MarkdownParser:
   private val extensions = java.util.Arrays.asList(
     TablesExtension.create(),
     StrikethroughExtension.create(),
-    YamlFrontMatterExtension.create(),
   )
 
   private val parser = Parser.builder()
@@ -43,15 +41,21 @@ object MarkdownParser:
     .extensions(extensions)
     .build()
 
-  /** Parse a raw .md string into (frontmatter map, rendered HTML body) */
   def parse(raw: String): (Map[String, List[String]], String) =
-    val document = parser.parse(raw)
+    val (yamlBlock, markdownContent) = raw.stripLeading() match
+      case s if s.startsWith("---") =>
+        val withoutFirstDelim = s.stripPrefix("---")
+        val endIndex = withoutFirstDelim.indexOf("\n---")
+        if endIndex >= 0 then
+          val yaml = withoutFirstDelim.substring(0, endIndex).strip()
+          val md = withoutFirstDelim.substring(endIndex + 4).strip()
+          (yaml, md)
+        else
+          ("", s)
+      case s => ("", s)
 
-    // Estrai front matter YAML
-    val yamlBlock = document.getFirstChild match
-      case yfm: org.commonmark.ext.front.matter.YamlFrontMatterBlock =>
-        yfm.getContent.strip()
-      case _ => ""
+    val document = parser.parse(markdownContent)
+    val html = renderer.render(document)
 
     val fm = if yamlBlock.nonEmpty then
       val yaml = Yaml()
@@ -61,17 +65,14 @@ object MarkdownParser:
       convertYamlMap(data)
     else Map.empty[String, List[String]]
 
-    val html = renderer.render(document)
     (fm, html)
 
-  /** Converte una mappa YAML nel formato Map[String, List[String]] */
   private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
     data.asScala.toMap.map { (key, value) =>
       val list = value match
         case s: String              => List(s)
         case l: JList[_]            => l.asScala.toList.map(_.toString)
-        case m: JMap[_, _]          => List(value.toString)
-        case other                  => List(other.toString)
+        case _                      => List(value.toString)
       key -> list
     }
 
