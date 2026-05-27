@@ -52,6 +52,9 @@ object MarkdownParser:
 
   def frontString(fm: Map[String, List[String]], key: String): Option[String] =
     fm.get(key).flatMap(_.headOption).map(_.stripPrefix("\"").stripSuffix("\""))
+    
+  def frontMultiline(fm: Map[String, List[String]], key: String): Option[String] =
+  fm.get(key).map(_.mkString(" ").stripPrefix("\"").stripSuffix("\""))
 
   def frontList(fm: Map[String, List[String]], key: String): List[String] =
     fm.get(key).getOrElse(Nil).map(_.stripPrefix("\"").stripSuffix("\""))
@@ -140,7 +143,7 @@ object ProfileLoader:
     for
       name     <- MarkdownParser.frontString(fm, "name")
       role     <- MarkdownParser.frontString(fm, "role")
-      bio      <- MarkdownParser.frontString(fm, "bio")
+      bio      <- MarkdownParser.frontMultiline(fm, "bio")
       location <- MarkdownParser.frontString(fm, "location")
       email    <- MarkdownParser.frontString(fm, "email")
     yield Profile(
