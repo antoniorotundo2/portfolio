@@ -1,8 +1,68 @@
+package portfolio.services
+
+import portfolio.models.*
+import com.vladsch.flexmark.html.HtmlRenderer
+import com.vladsch.flexmark.parser.Parser
+import com.vladsch.flexmark.ext.tables.TablesExtension
+import com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension
+import com.vladsch.flexmark.ext.yaml.front.matter.{AbstractYamlFrontMatterVisitor, YamlFrontMatterExtension}
+import com.vladsch.flexmark.util.data.MutableDataSet
+import zio.*
+
+import scala.jdk.CollectionConverters.*
+import java.nio.file.{FileSystem, FileSystems, Files, Path, Paths}
+import java.util.Arrays
+import java.util.Collections.emptyMap
+
+// ── Algebra ───────────────────────────────────────────────────────────────────
+
+trait PortfolioService:
+  def getProfile: UIO[Profile]
+  def getProjects: UIO[List[Project]]
+  def getProject(id: String): UIO[Option[Project]]
+  def getBlogPosts: UIO[List[BlogPost]]
+  def getBlogPost(slug: String): UIO[Option[BlogPost]]
+
+// ── Markdown parser ───────────────────────────────────────────────────────────
+
+object MarkdownParser:
+
+  private val options =
+    val opts = MutableDataSet()
+    opts.set(
+      Parser.EXTENSIONS,
+      Arrays.asList(
+        TablesExtension.create(),
+        StrikethroughExtension.create(),
+        YamlFrontMatterExtension.create(),
+      ),
+    )
+    opts
+
+  private val parser   = Parser.builder(options).build()
+  private val renderer = HtmlRenderer.builder(options).build()
+
+  def parse(raw: String): (Map[String, List[String]], String) =
+    val document = parser.parse(raw)
+    val visitor = new AbstractYamlFrontMatterVisitor()
+    visitor.visit(document)
+    val fm = visitor.getData.asScala.toMap.map { (k, v) => k -> v.asScala.toList }
+    val html = renderer.render(document)
+    (fm, html)
+
+  def frontString(fm: Map[String, List[String]], key: String): Option[String] =
+    fm.get(key).flatMap(_.headOption).map(_.stripPrefix("\"").stripSuffix("\""))
+
+  def frontList(fm: Map[String, List[String]], key: String): List[String] =
+    fm.get(key).getOrElse(Nil).map(_.stripPrefix("\"").stripSuffix("\""))
+
+  def frontInt(fm: Map[String, List[String]], key: String, default: Int): Int =
+    frontString(fm, key).flatMap(_.toIntOption).getOrElse(default)
+
 // ── Generic resource loader ───────────────────────────────────────────────────
 
 object ResourceLoader:
 
-  // Carica tutti i file .md da una directory nel classpath
   def loadDirectory(dirName: String): Task[List[(String, String)]] =
     ZIO.attemptBlocking {
       val url = getClass.getResource(s"/$dirName")
@@ -35,6 +95,33 @@ object ResourceLoader:
         jarFs.foreach(_.close())
       }
     }
+
+// ── Post loader ───────────────────────────────────────────────────────────────
+
+object PostLoader:
+
+  def loadAll: Task[List[BlogPost]] =
+    ResourceLoader.loadDirectory("posts").map { files =>
+      files.flatMap { (slug, raw) => parsePost(slug, raw) }
+        .sortBy(_.publishedAt).reverse
+    }
+
+  private def parsePost(slug: String, raw: String): Option[BlogPost] =
+    val (fm, html) = MarkdownParser.parse(raw)
+    for
+      title   <- MarkdownParser.frontString(fm, "title")
+      excerpt <- MarkdownParser.frontString(fm, "excerpt")
+      date    <- MarkdownParser.frontString(fm, "publishedAt")
+    yield BlogPost(
+      id             = slug,
+      slug           = slug,
+      title          = title,
+      excerpt        = excerpt,
+      content        = html,
+      tags           = MarkdownParser.frontList(fm, "tags"),
+      publishedAt    = date,
+      readingMinutes = MarkdownParser.frontInt(fm, "readingMinutes", 5),
+    )
 
 // ── Profile loader ────────────────────────────────────────────────────────────
 
@@ -102,3 +189,27 @@ object ProjectLoader:
                           .getOrElse(ProjectStatus.Active),
       year            = MarkdownParser.frontInt(fm, "year", 2024),
     )
+
+// ── Live implementation ───────────────────────────────────────────────────────
+
+object PortfolioServiceLive:
+
+  val layer: TaskLayer[PortfolioService] =
+    ZLayer.fromZIO(
+      for
+        posts    <- PostLoader.loadAll
+        projects <- ProjectLoader.loadAll
+        profile  <- ProfileLoader.load
+      yield Live(profile, projects, posts)
+    )
+
+  private final class Live(
+    profile: Profile,
+    projects: List[Project],
+    posts: List[BlogPost]
+  ) extends PortfolioService:
+    def getProfile: UIO[Profile]                         = ZIO.succeed(profile)
+    def getProjects: UIO[List[Project]]                  = ZIO.succeed(projects)
+    def getProject(id: String): UIO[Option[Project]]     = ZIO.succeed(projects.find(_.id == id))
+    def getBlogPosts: UIO[List[BlogPost]]                = ZIO.succeed(posts)
+    def getBlogPost(slug: String): UIO[Option[BlogPost]] = ZIO.succeed(posts.find(_.slug == slug))
