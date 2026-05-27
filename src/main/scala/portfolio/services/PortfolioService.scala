@@ -70,13 +70,15 @@ object MarkdownParser:
   private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
     data.asScala.toMap.map { (key, value) =>
       val list = value match
-        case null           => List.empty[String]
-        case s: String      => List(s)
-        case l: JList[_]    => l.asScala.toList.map(_.toString)
-        case m: JMap[_, _]  => List(value.toString)
-        case other          => List(other.toString)
+        case null                     => List.empty[String]
+        case s: String                => List(s)
+        case l: java.util.List[_]     => l.asScala.toList.map(_.toString)
+        case m: java.util.Map[_, _]   => 
+          // Se è una mappa, converti ogni valore in stringa
+          m.asScala.toList.map { (k, v) => s"$k: $v" }
+        case other                    => List(other.toString)
       key -> list
-    } 
+    }
 
   def frontString(fm: Map[String, List[String]], key: String): Option[String] =
     fm.get(key).flatMap(_.headOption)
