@@ -1,17 +1,10 @@
 package portfolio.services
 
 import portfolio.models.*
-import com.vladsch.flexmark.html.HtmlRenderer
-import com.vladsch.flexmark.parser.Parser
-import com.vladsch.flexmark.ext.tables.TablesExtension
-import com.vladsch.flexmark.ext.gfm.strikethrough.StrikethroughExtension
-import com.vladsch.flexmark.ext.yaml.front.matter.{AbstractYamlFrontMatterVisitor, YamlFrontMatterExtension}
-import com.vladsch.flexmark.util.data.MutableDataSet
 import zio.*
 
 import scala.jdk.CollectionConverters.*
 import java.nio.file.{FileSystem, FileSystems, Files, Path, Paths}
-import java.util.Arrays
 import java.util.Collections.emptyMap
 
 // ── Algebra ───────────────────────────────────────────────────────────────────
@@ -27,37 +20,66 @@ trait PortfolioService:
 
 object MarkdownParser:
 
-  private val options =
-    val opts = MutableDataSet()
-    opts.set(
-      Parser.EXTENSIONS,
-      Arrays.asList(
-        TablesExtension.create(),
-        StrikethroughExtension.create(),
-        YamlFrontMatterExtension.create(),
-      ),
-    )
-    opts
+  import org.commonmark.parser.Parser
+  import org.commonmark.renderer.html.HtmlRenderer
+  import org.commonmark.ext.front.matter.YamlFrontMatterExtension
+  import org.commonmark.ext.gfm.tables.TablesExtension
+  import org.commonmark.ext.gfm.strikethrough.StrikethroughExtension
+  import org.yaml.snakeyaml.Yaml
 
-  private val parser   = Parser.builder(options).build()
-  private val renderer = HtmlRenderer.builder(options).build()
+  import java.util.{List as JList, Map as JMap}
 
+  private val extensions = java.util.Arrays.asList(
+    TablesExtension.create(),
+    StrikethroughExtension.create(),
+    YamlFrontMatterExtension.create(),
+  )
+
+  private val parser = Parser.builder()
+    .extensions(extensions)
+    .build()
+
+  private val renderer = HtmlRenderer.builder()
+    .extensions(extensions)
+    .build()
+
+  /** Parse a raw .md string into (frontmatter map, rendered HTML body) */
   def parse(raw: String): (Map[String, List[String]], String) =
     val document = parser.parse(raw)
-    val visitor = new AbstractYamlFrontMatterVisitor()
-    visitor.visit(document)
-    val fm = visitor.getData.asScala.toMap.map { (k, v) => k -> v.asScala.toList }
+
+    // Estrai front matter YAML
+    val yamlBlock = document.getFirstChild match
+      case yfm: org.commonmark.ext.front.matter.YamlFrontMatterBlock =>
+        yfm.getLiteral.stripPrefix("---").stripSuffix("---").strip()
+      case _ => ""
+
+    val fm = if yamlBlock.nonEmpty then
+      val yaml = Yaml()
+      val data = yaml.load(yamlBlock) match
+        case map: JMap[?, ?] => map.asInstanceOf[JMap[String, Any]]
+        case _ => java.util.Collections.emptyMap[String, Any]()
+      convertYamlMap(data)
+    else Map.empty[String, List[String]]
+
     val html = renderer.render(document)
     (fm, html)
 
+  /** Converte una mappa YAML nel formato Map[String, List[String]] */
+  private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
+    data.asScala.toMap.map { (key, value) =>
+      val list = value match
+        case s: String              => List(s)
+        case l: JList[_]            => l.asScala.toList.map(_.toString)
+        case m: JMap[_, _]          => List(value.toString)
+        case other                  => List(other.toString)
+      key -> list
+    }
+
   def frontString(fm: Map[String, List[String]], key: String): Option[String] =
-    fm.get(key).flatMap(_.headOption).map(_.stripPrefix("\"").stripSuffix("\""))
-    
-  def frontMultiline(fm: Map[String, List[String]], key: String): Option[String] =
-    fm.get(key).map(_.mkString(" ").stripPrefix("\"").stripSuffix("\""))
+    fm.get(key).flatMap(_.headOption)
 
   def frontList(fm: Map[String, List[String]], key: String): List[String] =
-    fm.get(key).getOrElse(Nil).map(_.stripPrefix("\"").stripSuffix("\""))
+    fm.get(key).getOrElse(Nil)
 
   def frontInt(fm: Map[String, List[String]], key: String, default: Int): Int =
     frontString(fm, key).flatMap(_.toIntOption).getOrElse(default)
@@ -140,12 +162,10 @@ object ProfileLoader:
 
   private def parseProfile(raw: String): Option[Profile] =
     val (fm, _) = MarkdownParser.parse(raw)
-    println(s"[DEBUG PROFILE] Full frontmatter: $fm") //
     for
       name     <- MarkdownParser.frontString(fm, "name")
       role     <- MarkdownParser.frontString(fm, "role")
-      bio      <- MarkdownParser.frontMultiline(fm, "bio")
-      _        = println(s"[DEBUG PROFILE] Bio value: '$bio'")  //
+      bio      <- MarkdownParser.frontString(fm, "bio")
       location <- MarkdownParser.frontString(fm, "location")
       email    <- MarkdownParser.frontString(fm, "email")
     yield Profile(
@@ -159,19 +179,10 @@ object ProfileLoader:
     )
 
   private def parseSocials(fm: Map[String, List[String]]): List[SocialLink] =
-    val raw = MarkdownParser.frontList(fm, "socials")
-    // Log temporaneo - guarda i log di Render dopo il deploy
-    println(s"[DEBUG SOCIALS] Raw from Markdown: $raw")
-    raw.flatMap { entry =>
-      val parts = entry.split("\\|").map(_.trim).toList
-      println(s"[DEBUG SOCIALS] Parts for '$entry': $parts")
-      parts match
-        case label :: url :: icon :: Nil => 
-          println(s"[DEBUG SOCIALS] ✅ Parsed: $label")
-          Some(SocialLink(label, url, icon))
-        case _ => 
-          println(s"[DEBUG SOCIALS] ❌ Failed to parse: '$entry'")
-          None
+    MarkdownParser.frontList(fm, "socials").flatMap { entry =>
+      entry.split("\\|").toList match
+        case label :: url :: icon :: Nil => Some(SocialLink(label.trim, url.trim, icon.trim))
+        case _ => None
     }
 
 // ── Project loader ────────────────────────────────────────────────────────────
