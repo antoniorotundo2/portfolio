@@ -393,13 +393,26 @@ section { padding: 5rem 0 0; }
 }
 .contact-sub { color: var(--text-secondary); }
 
-.social-links { display: flex; gap: 1.25rem; margin-top: 0.5rem; }
+.social-links { display: flex; gap: 1rem; margin-top: 0.5rem; flex-wrap: wrap; justify-content: center; }
 .social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: var(--radius);
   font-size: 0.8rem;
   color: var(--text-muted);
-  transition: color var(--transition);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  transition: color var(--transition), border-color var(--transition), background var(--transition);
 }
-.social-link:hover { color: var(--accent); }
+.social-link svg { flex-shrink: 0; }
+.social-link:hover {
+  color: var(--accent);
+  border-color: var(--border-glow);
+  background: var(--accent-dim);
+}
+.social-label { font-size: 0.8rem; }
 
 /* ── Page hero (inner pages) ─────────────────────────────────────────────────── */
 .page-hero {
