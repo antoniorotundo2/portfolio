@@ -101,7 +101,7 @@ object ResourceLoader:
 object PostLoader:
 
   def loadAll: Task[List[BlogPost]] =
-    ResourceLoader.loadDirectory("posts").map { files =>
+    ResourceLoader.loadDirectory("blog").map { files =>
       files.flatMap { (slug, raw) => parsePost(slug, raw) }
         .sortBy(_.publishedAt).reverse
     }
@@ -128,7 +128,7 @@ object PostLoader:
 object ProfileLoader:
 
   def load: Task[Profile] =
-    ResourceLoader.loadDirectory("profile").flatMap { files =>
+    ResourceLoader.loadDirectory("home").flatMap { files =>
       files.headOption match
         case Some((_, raw)) => ZIO.fromOption(parseProfile(raw))
           .orElseFail(new RuntimeException("Failed to parse profile"))
