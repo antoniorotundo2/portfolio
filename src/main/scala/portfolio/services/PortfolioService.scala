@@ -50,7 +50,7 @@ object MarkdownParser:
     // Estrai front matter YAML
     val yamlBlock = document.getFirstChild match
       case yfm: org.commonmark.ext.front.matter.YamlFrontMatterBlock =>
-        yfm.getLiteral.stripPrefix("---").stripSuffix("---").strip()
+        yfm.getContent.strip()
       case _ => ""
 
     val fm = if yamlBlock.nonEmpty then
