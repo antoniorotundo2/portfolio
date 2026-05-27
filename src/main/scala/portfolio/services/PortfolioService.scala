@@ -40,7 +40,7 @@ object MarkdownParser:
   private val renderer = HtmlRenderer.builder()
     .extensions(extensions)
     .build()
-
+    
   def parse(raw: String): (Map[String, List[String]], String) =
     val (yamlBlock, markdownContent) = raw.stripLeading() match
       case s if s.startsWith("---") =>
@@ -70,11 +70,13 @@ object MarkdownParser:
   private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
     data.asScala.toMap.map { (key, value) =>
       val list = value match
-        case s: String              => List(s)
-        case l: JList[_]            => l.asScala.toList.map(_.toString)
-        case _                      => List(value.toString)
+        case null           => List.empty[String]
+        case s: String      => List(s)
+        case l: JList[_]    => l.asScala.toList.map(_.toString)
+        case m: JMap[_, _]  => List(value.toString)
+        case other          => List(other.toString)
       key -> list
-    }
+    } 
 
   def frontString(fm: Map[String, List[String]], key: String): Option[String] =
     fm.get(key).flatMap(_.headOption)
