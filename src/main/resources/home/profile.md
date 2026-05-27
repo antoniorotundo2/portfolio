@@ -1,9 +1,9 @@
 ---
-name: "Alex Ferretti"
+name: "Antonio Rotundo"
 role: "Software Engineer"
 bio: "I build robust, scalable systems with a passion for functional programming, type safety, and elegant architecture. Specialised in Scala, ZIO, and distributed systems."
-location: "Milano, IT"
-email: "alex@ferretti.dev"
+location: "Rimini, IT"
+email: "antonio@rotundo.dev"
 skills:
   - Scala
   - ZIO
@@ -16,7 +16,7 @@ skills:
   - Redis
   - gRPC
 socials:
-  - GitHub | https://github.com | github
-  - LinkedIn | https://linkedin.com | linkedin
-  - Twitter | https://twitter.com | twitter
+  - GitHub | https://github.com/antoniorotundo2 | github
+  - LinkedIn | https://linkedin.com/in/eng-antonio-rotundo | linkedin
+  - X | https://x.com/anthony55789 | x
 ---
