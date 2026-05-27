@@ -140,10 +140,12 @@ object ProfileLoader:
 
   private def parseProfile(raw: String): Option[Profile] =
     val (fm, _) = MarkdownParser.parse(raw)
+    println(s"[DEBUG PROFILE] Full frontmatter: $fm") //
     for
       name     <- MarkdownParser.frontString(fm, "name")
       role     <- MarkdownParser.frontString(fm, "role")
       bio      <- MarkdownParser.frontMultiline(fm, "bio")
+      _        = println(s"[DEBUG PROFILE] Bio value: '$bio'")  //
       location <- MarkdownParser.frontString(fm, "location")
       email    <- MarkdownParser.frontString(fm, "email")
     yield Profile(
