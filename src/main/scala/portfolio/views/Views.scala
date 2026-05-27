@@ -28,7 +28,7 @@ object Layout:
     nav(cls := "navbar")(
       a(href := "/", cls := "nav-logo")(
         span(cls := "logo-bracket")("["),
-        "AF",
+        "AR",
         span(cls := "logo-bracket")("]"),
       ),
       div(cls := "nav-links")(
@@ -42,7 +42,7 @@ object Layout:
   private def footer =
     tag("footer")(cls := "site-footer")(
       div(cls := "footer-inner")(
-        span(cls := "footer-copy")("© 2025 Alex Ferretti"),
+        span(cls := "footer-copy")("© 2025 Antonio Rotundo"),
         span(cls := "footer-sep")("//"),
         span(cls := "footer-built")("built with Scala + ZIO"),
       ),
@@ -64,7 +64,7 @@ object Layout:
 object HomeView:
 
   def render(profile: Profile, featuredProjects: List[Project], latestPosts: List[BlogPost]): String =
-    Layout.page("Alex Ferretti — Software Engineer", "/",
+    Layout.page("Antonio Rotundo — Software Engineer", "/",
       // Hero
       section(cls := "hero")(
         div(cls := "hero-label")("> whoami"),
@@ -73,6 +73,7 @@ object HomeView:
           span(cls := "role-prefix")("_ "),
           profile.role,
         ),
+        p(cls := "hero-location")(profile.location),
         p(cls := "hero-bio")(profile.bio),
         div(cls := "hero-actions")(
           a(href := "/projects", cls := "btn btn-primary")("view projects"),
@@ -152,7 +153,7 @@ object ProjectCard:
 
 object ProjectsView:
   def render(projects: List[Project]): String =
-    Layout.page("Projects — Alex Ferretti", "/projects",
+    Layout.page("Projects — Antonio Rotundo", "/projects",
       section(cls := "page-hero")(
         span(cls := "section-tag")("// projects"),
         h1(cls := "page-title")("Things I've built"),
@@ -183,7 +184,7 @@ object BlogCard:
 
 object BlogView:
   def render(posts: List[BlogPost]): String =
-    Layout.page("Blog — Alex Ferretti", "/blog",
+    Layout.page("Blog — Antonio Rotundo", "/blog",
       section(cls := "page-hero")(
         span(cls := "section-tag")("// blog"),
         h1(cls := "page-title")("Writing"),
@@ -196,7 +197,7 @@ object BlogView:
 
 object BlogPostView:
   def render(post: BlogPost): String =
-    Layout.page(s"${post.title} — Alex Ferretti", "/blog",
+    Layout.page(s"${post.title} — Antonio Rotundo", "/blog",
       article(cls := "post-full")(
         header(cls := "post-header")(
           div(cls := "post-meta")(
