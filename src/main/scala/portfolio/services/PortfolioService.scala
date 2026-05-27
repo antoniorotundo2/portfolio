@@ -68,15 +68,15 @@ object MarkdownParser:
     (fm, html)
 
   private def convertYamlMap(data: JMap[String, Any]): Map[String, List[String]] =
+    println(s"[DEBUG V3] convertYamlMap chiamata con chiavi: ${data.keySet().asScala.mkString(", ")}")  // 👈 Log forzato  
     data.asScala.toMap.map { (key, value) =>
-      val list = value match
-        case null                     => List.empty[String]
-        case s: String                => List(s)
-        case l: java.util.List[_]     => l.asScala.toList.map(_.toString)
-        case m: java.util.Map[_, _]   => 
-          // Se è una mappa, converti ogni valore in stringa
-          m.asScala.toList.map { (k, v) => s"$k: $v" }
-        case other                    => List(other.toString)
+      val list = Option(value) match
+        case None => List.empty[String]
+        case Some(v) =>
+          v match
+            case s: String            => List(s)
+            case l: java.util.List[_] => l.asScala.toList.map(_.toString)
+            case other                => List(other.toString)
       key -> list
     }
 
