@@ -66,7 +66,7 @@ object MarkdownParser:
 
 object PostLoader:
 
-  /** Load all posts from classpath resources/posts/*.md */
+  // Load all posts from classpath resources/posts/*.md
   def loadAll: Task[List[BlogPost]] =
     ZIO.attemptBlocking {
       val cl  = Thread.currentThread().getContextClassLoader
