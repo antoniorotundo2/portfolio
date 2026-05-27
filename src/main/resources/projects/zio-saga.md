@@ -1,14 +1,14 @@
 ---
-id: zio-saga
-title: ZIO Saga
-description: Distributed saga pattern implementation for ZIO
+id: "zio-saga"
+title: "ZIO Saga"
+description: "Distributed saga pattern implementation for ZIO"
 tags:
   - Scala
   - ZIO
   - Distributed Systems
   - Open Source
-githubUrl: https://github.com/example/zio-saga
-status: active
+githubUrl: "https://github.com/example/zio-saga"
+status: "active"
 year: 2024
 ---
 

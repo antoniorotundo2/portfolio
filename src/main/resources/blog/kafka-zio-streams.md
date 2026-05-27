@@ -1,6 +1,6 @@
 ---
-title: Building a Kafka Consumer with ZIO Streams
-excerpt: Step-by-step guide to building a resilient, backpressure-aware Kafka consumer using ZIO Streams and zio-kafka.
+title: "Building a Kafka Consumer with ZIO Streams"
+excerpt: "Step-by-step guide to building a resilient, backpressure-aware Kafka consumer using ZIO Streams and zio-kafka."
 tags:
   - Scala
   - Kafka

@@ -1,15 +1,15 @@
 ---
-id: type-safe-api
-title: Type-Safe REST API Framework
-description: Compile-time validated HTTP routes with full schema derivation
+id: "type-safe-api"
+title: "Type-Safe REST API Framework"
+description: "Compile-time validated HTTP routes with full schema derivation"
 tags:
   - Scala 3
   - ZIO HTTP
   - Macros
   - OpenAPI
-githubUrl: https://github.com/example/type-safe-api
-liveUrl: https://example.dev/type-safe-api
-status: active
+githubUrl: "https://github.com/example/type-safe-api"
+liveUrl: "https://example.dev/type-safe-api"
+status: "active"
 year: 2023
 ---
 

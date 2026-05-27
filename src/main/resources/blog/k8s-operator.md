@@ -1,14 +1,14 @@
 ---
-id: k8s-operator
-title: Kubernetes Operator in Scala
-description: Custom Kubernetes operator for managing stateful Scala microservices
+id: "k8s-operator"
+title: "Kubernetes Operator in Scala"
+description: "Custom Kubernetes operator for managing stateful Scala microservices"
 tags:
   - Scala
   - Kubernetes
   - DevOps
   - Operators
-githubUrl: https://github.com/example/k8s-operator
-status: archived
+githubUrl: "https://github.com/example/k8s-operator"
+status: "archived"
 year: 2023
 ---
 

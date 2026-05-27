@@ -1,14 +1,14 @@
 ---
-id: stream-processor
-title: Real-time Stream Processor
-description: High-throughput event processing pipeline with Kafka + ZIO Streams
+id: "stream-processor"
+title: "Real-time Stream Processor"
+description: "High-throughput event processing pipeline with Kafka + ZIO Streams"
 tags:
   - Scala
   - Kafka
   - ZIO Streams
   - PostgreSQL
-githubUrl: https://github.com/example/stream-processor
-status: active
+githubUrl: "https://github.com/example/stream-processor"
+status: "active"
 year: 2024
 ---
 

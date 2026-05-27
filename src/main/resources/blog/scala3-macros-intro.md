@@ -1,6 +1,6 @@
 ---
-title: Scala 3 Macros: Generate Code at Compile Time
-excerpt: How to use Scala 3's new macro system to eliminate boilerplate and catch errors before your program ever runs.
+title: "Scala 3 Macros: Generate Code at Compile Time"
+excerpt: "How to use Scala 3's new macro system to eliminate boilerplate and catch errors before your program ever runs."
 tags:
   - Scala 3
   - Macros
