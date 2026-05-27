@@ -71,36 +71,40 @@ object MarkdownParser:
 object PostLoader:
 
   // Load all posts from classpath resources/posts/*.md
-  val uri = url.toURI
-  val dir: Path = uri.getScheme match {
-    case "file" =>
-      Paths.get(uri)
+  def loadAll: Task[List[BlogPost]] = ZIO.attemptBlocking {
 
-    case "jar" =>
-      // For a JAR resource, create a virtual filesystem and get the path
-      val env = Collections.emptyMap[String, Any]()
-      val fs: FileSystem = FileSystems.newFileSystem(uri, env)
-      try {
-        fs.getPath("/posts")
-      } finally {
-        fs.close()
-      }
+    val url = getClass.getResource("/posts")
+    if url == null then throw new RuntimeException("posts/ directory not found in classpath")
 
-    case other =>
-      throw new RuntimeException(s"Unsupported URI scheme: $other")
-  }
+    val uri = url.toURI
 
-      // List .md files from the directory
-      val files = java.nio.file.Files.list(dir).iterator().asScala
-        .filter(_.toString.endsWith(".md"))
-        .toList
-
-      files.flatMap { path =>
-        val slug = path.getFileName.toString.stripSuffix(".md")
-        val raw  = java.nio.file.Files.readString(path)
-        parsePost(slug, raw)
-      }.sortBy(_.publishedAt).reverse
+    // Obtain a Path to the "posts" directory, whether in a JAR or on the filesystem
+    val dir: Path = uri.getScheme match {
+      case "file" => Paths.get(uri)
+      case "jar"  =>
+        val env = Collections.emptyMap[String, Any]()
+        val fs  = FileSystems.newFileSystem(uri, env)
+        try {
+          fs.getPath("/posts")
+        } finally {
+          fs.close()
+        }
+      case other =>
+        throw new RuntimeException(s"Unsupported URI scheme: $other")
     }
+
+    // List .md files
+    val files = Files.list(dir).iterator().asScala
+      .filter(_.toString.endsWith(".md"))
+      .toList
+
+    // Parse each file and collect the results
+    files.flatMap { path =>
+      val slug = path.getFileName.toString.stripSuffix(".md")
+      val raw  = Files.readString(path)
+      parsePost(slug, raw)
+    }.sortBy(_.publishedAt).reverse
+  }
 
   private def parsePost(slug: String, raw: String): Option[BlogPost] =
     val (fm, html) = MarkdownParser.parse(raw)
