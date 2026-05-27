@@ -18,5 +18,4 @@ skills:
 socials:
   - GitHub | https://github.com/antoniorotundo2 | github
   - LinkedIn | https://linkedin.com/in/eng-antonio-rotundo | linkedin
-  - X | https://x.com/anthony55789 | twitter
 ---
