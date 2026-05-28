@@ -59,38 +59,39 @@ object Layout:
       link(rel := "stylesheet", href := "/static/css/main.css"),
     )
 
-  // Navigation bar
-  private def navbar(currentPath: String) =
+  // Navigation bar driven by LayoutConfig
+  private def navbar(layout: LayoutConfig, currentPath: String) =
     nav(cls := "navbar")(
       a(href := "/", cls := "nav-logo")(
         span(cls := "logo-bracket")("["),
-        "AR",
+        layout.logoText,
         span(cls := "logo-bracket")("]"),
       ),
       div(cls := "nav-links")(
-        a(href := "/",         cls := s"nav-link ${if currentPath == "/"         then "active" else ""}")("home"),
-        a(href := "/projects", cls := s"nav-link ${if currentPath == "/projects" then "active" else ""}")("projects"),
-        a(href := "/blog",     cls := s"nav-link ${if currentPath == "/blog"     then "active" else ""}")("blog"),
-        a(href := "/#contact", cls := "nav-link nav-cta")("contact"),
+        layout.navLinks.map { link =>
+          val activeClass = if link.path == currentPath || (link.path != "/" && currentPath.startsWith(link.path)) then " active" else ""
+          val ctaClass    = if link.isCta then " nav-cta" else ""
+          a(href := link.path, cls := s"nav-link$activeClass$ctaClass")(link.label)
+        }*
       ),
     )
 
-  private def footer =
+  private def footer(layout: LayoutConfig) =
     tag("footer")(cls := "site-footer")(
       div(cls := "footer-inner")(
-        span(cls := "footer-copy")("© 2025 Antonio Rotundo"),
+        span(cls := "footer-copy")(layout.footerCopy),
         span(cls := "footer-sep")("//"),
-        span(cls := "footer-built")("built with Scala + ZIO"),
+        span(cls := "footer-built")(layout.footerBuiltWith),
       ),
     )
 
-  def page(pageTitle: String, currentPath: String, content: Modifier*): String =
+  def page(layout: LayoutConfig, pageTitle: String, currentPath: String, content: Modifier*): String =
     "<!DOCTYPE html>" + html(lang := "en")(
       headBlock(pageTitle),
       body(
-        navbar(currentPath),
+        navbar(layout, currentPath),
         main(cls := "site-main")(content*),
-        footer,
+        footer(layout),
         script(src := "/static/js/main.js"),
       ),
     ).render
@@ -99,32 +100,32 @@ object Layout:
 
 object HomeView:
 
-  def render(profile: Profile, featuredProjects: List[Project], latestPosts: List[BlogPost]): String =
-    Layout.page("Antonio Rotundo — Software Engineer", "/",
+  def render(layout: LayoutConfig, home: HomeConfig, profile: Profile, featuredProjects: List[Project], latestPosts: List[BlogPost]): String =
+    Layout.page(layout, home.pageTitle, "/",
       // Hero
       section(cls := "hero")(
-        div(cls := "hero-label")("> whoami"),
+        div(cls := "hero-label")(home.heroLabel),
         h1(cls := "hero-name")(profile.name),
         p(cls  := "hero-role")(
-          span(cls := "role-prefix")("_ "),
+          span(cls := "role-prefix")(home.rolePrefix),
           profile.role,
         ),
         p(cls := "hero-bio")(profile.bio),
         div(cls := "hero-actions")(
-          a(href := "/projects", cls := "btn btn-primary")("view projects"),
-          a(href := "/blog",     cls := "btn btn-ghost")("read blog"),
+          a(href := "/projects", cls := "btn btn-primary")(home.heroCtaPrimary),
+          a(href := "/blog",     cls := "btn btn-ghost")(home.heroCtaSecondary),
         ),
         div(cls := "hero-stats")(
           div(cls := "stat")(span(cls := "stat-num")(featuredProjects.length.toString), span(cls := "stat-label")("projects")),
-          div(cls := "stat")(span(cls := "stat-num")(latestPosts.length.toString), span(cls := "stat-label")("articles")),
-          div(cls := "stat")(span(cls := "stat-num")("5+"), span(cls := "stat-label")("years")),
+          div(cls := "stat")(span(cls := "stat-num")(latestPosts.length.toString),      span(cls := "stat-label")("articles")),
+          div(cls := "stat")(span(cls := "stat-num")(home.statYearsValue),              span(cls := "stat-label")(home.statYearsLabel)),
         ),
       ),
 
       // Skills
       section(cls := "skills-section")(
         div(cls := "section-header")(
-          span(cls := "section-tag")("// tech_stack"),
+          span(cls := "section-tag")(home.sectionSkills),
         ),
         div(cls := "skills-grid")(
           profile.skills.map(skill => span(cls := "skill-tag")(skill))*
@@ -134,30 +135,30 @@ object HomeView:
       // Featured projects
       section(cls := "featured-section")(
         div(cls := "section-header")(
-          span(cls := "section-tag")("// featured_projects"),
-          a(href := "/projects", cls := "see-all")("see all →"),
+          span(cls := "section-tag")(home.sectionProjects),
+          a(href := "/projects", cls := "see-all")(home.seeAllLabel),
         ),
         div(cls := "projects-grid")(
-          featuredProjects.take(3).map(proj => ProjectCard.mini(proj))*
+          featuredProjects.take(home.featuredProjectsCount).map(proj => ProjectCard.mini(proj, home.githubLinkLabel, home.liveLinkLabel))*
         ),
       ),
 
       // Latest posts
       section(cls := "posts-section")(
         div(cls := "section-header")(
-          span(cls := "section-tag")("// latest_posts"),
-          a(href := "/blog", cls := "see-all")("see all →"),
+          span(cls := "section-tag")(home.sectionPosts),
+          a(href := "/blog", cls := "see-all")(home.seeAllLabel),
         ),
         div(cls := "posts-list")(
-          latestPosts.take(3).map(post => BlogCard.mini(post))*
+          latestPosts.take(home.latestPostsCount).map(post => BlogCard.mini(post, home.readSuffix))*
         ),
       ),
 
       // Contact
       section(cls := "contact-section", id := "contact")(
-        span(cls := "section-tag")("// get_in_touch"),
-        h2(cls := "contact-title")("Let's build something"),
-        p(cls  := "contact-sub")("Open to interesting projects and conversations."),
+        span(cls := "section-tag")(home.sectionContact),
+        h2(cls := "contact-title")(home.contactTitle),
+        p(cls  := "contact-sub")(home.contactSubtitle),
         a(href := s"mailto:${profile.email}", cls := "btn btn-primary btn-lg")(
           profile.email,
         ),
@@ -175,9 +176,9 @@ object HomeView:
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 object ProjectCard:
-  def mini(proj: Project) =
-    val links = proj.githubUrl.map(u => a(href := u, cls := "card-link", target := "_blank")("github ↗")).toSeq ++
-                proj.liveUrl.map(u  => a(href := u, cls := "card-link card-link-live", target := "_blank")("live ↗")).toSeq
+  def mini(proj: Project, githubLabel: String, liveLabel: String) =
+    val links = proj.githubUrl.map(u => a(href := u, cls := "card-link", target := "_blank")(githubLabel)).toSeq ++
+                proj.liveUrl.map(u  => a(href := u, cls := "card-link card-link-live", target := "_blank")(liveLabel)).toSeq
     article(cls := "project-card")(
       div(cls := "card-top")(
         span(cls := s"status-dot status-${proj.status.toString.toLowerCase}"),
@@ -190,16 +191,16 @@ object ProjectCard:
     )
 
 object ProjectsView:
-  def render(projects: List[Project]): String =
-    Layout.page("Projects — Antonio Rotundo", "/projects",
+  def render(layout: LayoutConfig, cfg: ProjectsConfig, projects: List[Project]): String =
+    Layout.page(layout, cfg.pageTitle, "/projects",
       section(cls := "page-hero")(
-        span(cls := "section-tag")("// projects"),
-        h1(cls := "page-title")("Things I've built"),
-        p(cls  := "page-subtitle")("Open source tools, experiments, and production systems."),
+        span(cls := "section-tag")(cfg.sectionTag),
+        h1(cls := "page-title")(cfg.heading),
+        p(cls  := "page-subtitle")(cfg.subtitle),
       ),
       section(cls := "projects-full")(
         div(cls := "projects-grid projects-grid-full")(
-          projects.map(proj => ProjectCard.mini(proj))*
+          projects.map(proj => ProjectCard.mini(proj, cfg.githubLinkLabel, cfg.liveLinkLabel))*
         ),
       ),
     )
@@ -207,11 +208,11 @@ object ProjectsView:
 // ── Blog ─────────────────────────────────────────────────────────────────────
 
 object BlogCard:
-  def mini(post: BlogPost) =
+  def mini(post: BlogPost, readSuffix: String) =
     article(cls := "post-row")(
       div(cls := "post-meta")(
         time(cls := "post-date")(post.publishedAt),
-        span(cls := "post-read")(s"${post.readingMinutes} min"),
+        span(cls := "post-read")(s"${post.readingMinutes} ${cfg.readSuffix}"),
       ),
       div(cls := "post-body")(
         a(href := s"/blog/${post.slug}", cls := "post-title")(post.title),
@@ -221,26 +222,26 @@ object BlogCard:
     )
 
 object BlogView:
-  def render(posts: List[BlogPost]): String =
-    Layout.page("Blog — Antonio Rotundo", "/blog",
+  def render(layout: LayoutConfig, cfg: BlogConfig, posts: List[BlogPost]): String =
+    Layout.page(layout, cfg.pageTitle, "/blog",
       section(cls := "page-hero")(
-        span(cls := "section-tag")("// blog"),
-        h1(cls := "page-title")("Writing"),
-        p(cls  := "page-subtitle")("Notes on Scala, ZIO, distributed systems, and software craft."),
+        span(cls := "section-tag")(cfg.sectionTag),
+        h1(cls := "page-title")(cfg.heading),
+        p(cls  := "page-subtitle")(cfg.subtitle),
       ),
       section(cls := "blog-list")(
-        posts.map(post => BlogCard.mini(post))*
+        posts.map(post => BlogCard.mini(post, cfg.readSuffix))*
       ),
     )
 
 object BlogPostView:
-  def render(post: BlogPost): String =
-    Layout.page(s"${post.title} — Antonio Rotundo", "/blog",
+  def render(layout: LayoutConfig, cfg: BlogConfig, post: BlogPost): String =
+    Layout.page(layout, s"${post.title}${cfg.pageTitleSuffix}", "/blog",
       article(cls := "post-full")(
         header(cls := "post-header")(
           div(cls := "post-meta")(
             time(cls := "post-date")(post.publishedAt),
-            span(cls := "post-read")(s"${post.readingMinutes} min read"),
+            span(cls := "post-read")(s"${post.readingMinutes} ${cfg.readSuffixFull}"),
           ),
           h1(cls := "post-heading")(post.title),
           p(cls  := "post-lead")(post.excerpt),
@@ -248,7 +249,7 @@ object BlogPostView:
         ),
         div(cls := "post-content")(raw(post.content)),
         tag("footer")(cls := "post-footer")(
-          a(href := "/blog", cls := "back-link")("← back to blog"),
+          a(href := "/blog", cls := "back-link")(cfg.backLabel),
         ),
       ),
     )
@@ -256,12 +257,12 @@ object BlogPostView:
 // ── 404 ───────────────────────────────────────────────────────────────────────
 
 object NotFoundView:
-  def render: String =
-    Layout.page("404 — Not Found", "",
+  def render(layout: LayoutConfig, cfg: NotFoundConfig): String =
+    Layout.page(layout, cfg.pageTitle, "",
       section(cls := "not-found")(
-        span(cls := "nf-code")("404"),
-        h1(cls := "nf-title")("Page not found"),
-        p(cls  := "nf-sub")("The route you requested doesn't exist."),
-        a(href := "/", cls := "btn btn-primary")("go home"),
+        span(cls := "nf-code")(cfg.errorCode),
+        h1(cls := "nf-title")(cfg.errorTitle),
+        p(cls  := "nf-sub")(cfg.errorSubtitle),
+        a(href := "/", cls := "btn btn-primary")(cfg.goHomeLabel),
       ),
     )

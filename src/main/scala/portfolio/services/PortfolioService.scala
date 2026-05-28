@@ -10,6 +10,11 @@ import java.util.Collections.emptyMap
 // ── Algebra ───────────────────────────────────────────────────────────────────
 
 trait PortfolioService:
+  def getLayout: UIO[LayoutConfig]
+  def getHomeConfig: UIO[HomeConfig]
+  def getProjectsConfig: UIO[ProjectsConfig]
+  def getBlogConfig: UIO[BlogConfig]
+  def getNotFoundConfig: UIO[NotFoundConfig]
   def getProfile: UIO[Profile]
   def getProjects: UIO[List[Project]]
   def getProject(id: String): UIO[Option[Project]]
@@ -224,6 +229,177 @@ object ProjectLoader:
       year            = MarkdownParser.frontInt(fm, "year", 2024),
     )
 
+// ── Home loader ───────────────────────────────────────────────────────────────
+
+object HomeLoader:
+
+  def load: Task[HomeConfig] =
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/home/home.md")
+      if stream == null then
+        throw new RuntimeException("home/home.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parseHome(raw))
+        .orElseFail(new RuntimeException(
+          "Failed to parse home/home.md: check required frontmatter fields"
+        ))
+    }
+
+  private def parseHome(raw: String): Option[HomeConfig] =
+    val (fm, _) = MarkdownParser.parse(raw)
+    for
+      pageTitle    <- MarkdownParser.frontString(fm, "pageTitle")
+      heroLabel    <- MarkdownParser.frontString(fm, "heroLabel")
+      rolePrefix   <- MarkdownParser.frontString(fm, "rolePrefix")
+      ctaPrimary   <- MarkdownParser.frontString(fm, "heroCtaPrimary")
+      ctaSecondary <- MarkdownParser.frontString(fm, "heroCtaSecondary")
+      statYearsVal <- MarkdownParser.frontString(fm, "statYearsValue")
+      statYearsLbl <- MarkdownParser.frontString(fm, "statYearsLabel")
+      secSkills    <- MarkdownParser.frontString(fm, "sectionSkills")
+      secProjects  <- MarkdownParser.frontString(fm, "sectionProjects")
+      secPosts     <- MarkdownParser.frontString(fm, "sectionPosts")
+      secContact   <- MarkdownParser.frontString(fm, "sectionContact")
+      seeAll       <- MarkdownParser.frontString(fm, "seeAllLabel")
+      contactTitle <- MarkdownParser.frontString(fm, "contactTitle")
+      contactSub   <- MarkdownParser.frontString(fm, "contactSubtitle")
+    yield HomeConfig(
+      pageTitle             = pageTitle,
+      heroLabel             = heroLabel,
+      rolePrefix            = rolePrefix,
+      heroCtaPrimary        = ctaPrimary,
+      heroCtaSecondary      = ctaSecondary,
+      statYearsValue        = statYearsVal,
+      statYearsLabel        = statYearsLbl,
+      sectionSkills         = secSkills,
+      sectionProjects       = secProjects,
+      sectionPosts          = secPosts,
+      sectionContact        = secContact,
+      seeAllLabel           = seeAll,
+      featuredProjectsCount = MarkdownParser.frontInt(fm, "featuredProjectsCount", 3),
+      latestPostsCount      = MarkdownParser.frontInt(fm, "latestPostsCount", 3),
+      contactTitle          = contactTitle,
+      contactSubtitle       = contactSub,
+      githubLinkLabel       = MarkdownParser.frontString(fm, "githubLinkLabel").getOrElse("github ↗"),
+      liveLinkLabel         = MarkdownParser.frontString(fm, "liveLinkLabel").getOrElse("live ↗"),
+      readSuffix            = MarkdownParser.frontString(fm, "readSuffix").getOrElse("min"),
+    )
+
+// ── Layout loader ─────────────────────────────────────────────────────────────
+
+object LayoutLoader:
+
+  def load: Task[LayoutConfig] =
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/layout/layout.md")
+      if stream == null then
+        throw new RuntimeException("layout/layout.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parseLayout(raw))
+        .orElseFail(new RuntimeException(
+          "Failed to parse layout/layout.md: check required frontmatter fields (logoText, footerCopy, footerBuiltWith)"
+        ))
+    }
+
+  private def parseLayout(raw: String): Option[LayoutConfig] =
+    val (fm, _) = MarkdownParser.parse(raw)
+    for
+      logoText      <- MarkdownParser.frontString(fm, "logoText")
+      footerCopy    <- MarkdownParser.frontString(fm, "footerCopy")
+      footerBuiltWith <- MarkdownParser.frontString(fm, "footerBuiltWith")
+    yield LayoutConfig(
+      logoText        = logoText,
+      navLinks        = parseNavLinks(fm),
+      footerCopy      = footerCopy,
+      footerBuiltWith = footerBuiltWith,
+    )
+
+  private def parseNavLinks(fm: Map[String, List[String]]): List[NavLink] =
+    MarkdownParser.frontList(fm, "navLinks").flatMap { entry =>
+      entry.split("\\|").map(_.trim).toList match
+        case label :: path :: rest =>
+          val isCta = rest.headOption.exists(_.toLowerCase == "cta")
+          Some(NavLink(label, path, isCta))
+        case _ => None
+    }
+
+// ── Projects loader ───────────────────────────────────────────────────────────
+
+object ProjectsLoader:
+
+  def load: Task[ProjectsConfig] =
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/projects/projects.md")
+      if stream == null then throw new RuntimeException("projects/projects.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parse(raw))
+        .orElseFail(new RuntimeException("Failed to parse projects/projects.md"))
+    }
+
+  private def parse(raw: String): Option[ProjectsConfig] =
+    val (fm, _) = MarkdownParser.parse(raw)
+    for
+      pageTitle       <- MarkdownParser.frontString(fm, "pageTitle")
+      sectionTag      <- MarkdownParser.frontString(fm, "sectionTag")
+      heading         <- MarkdownParser.frontString(fm, "heading")
+      subtitle        <- MarkdownParser.frontString(fm, "subtitle")
+      githubLinkLabel <- MarkdownParser.frontString(fm, "githubLinkLabel")
+      liveLinkLabel   <- MarkdownParser.frontString(fm, "liveLinkLabel")
+    yield ProjectsConfig(pageTitle, sectionTag, heading, subtitle, githubLinkLabel, liveLinkLabel)
+
+// ── Blog loader ───────────────────────────────────────────────────────────────
+
+object BlogLoader:
+
+  def load: Task[BlogConfig] =
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/blog/blog.md")
+      if stream == null then throw new RuntimeException("blog/blog.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parse(raw))
+        .orElseFail(new RuntimeException("Failed to parse blog/blog.md"))
+    }
+
+  private def parse(raw: String): Option[BlogConfig] =
+    val (fm, _) = MarkdownParser.parse(raw)
+    for
+      pageTitle       <- MarkdownParser.frontString(fm, "pageTitle")
+      pageTitleSuffix <- MarkdownParser.frontString(fm, "pageTitleSuffix")
+      sectionTag      <- MarkdownParser.frontString(fm, "sectionTag")
+      heading         <- MarkdownParser.frontString(fm, "heading")
+      subtitle        <- MarkdownParser.frontString(fm, "subtitle")
+      readSuffix      <- MarkdownParser.frontString(fm, "readSuffix")
+      readSuffixFull  <- MarkdownParser.frontString(fm, "readSuffixFull")
+      backLabel       <- MarkdownParser.frontString(fm, "backLabel")
+    yield BlogConfig(pageTitle, pageTitleSuffix, sectionTag, heading, subtitle, readSuffix, readSuffixFull, backLabel)
+
+// ── NotFound loader ───────────────────────────────────────────────────────────
+
+object NotFoundLoader:
+
+  def load: Task[NotFoundConfig] =
+    ZIO.attemptBlocking {
+      val stream = getClass.getResourceAsStream("/notfound/notfound.md")
+      if stream == null then throw new RuntimeException("notfound/notfound.md not found in classpath")
+      new String(stream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
+    }.flatMap { raw =>
+      ZIO.fromOption(parse(raw))
+        .orElseFail(new RuntimeException("Failed to parse notfound/notfound.md"))
+    }
+
+  private def parse(raw: String): Option[NotFoundConfig] =
+    val (fm, _) = MarkdownParser.parse(raw)
+    for
+      pageTitle     <- MarkdownParser.frontString(fm, "pageTitle")
+      errorCode     <- MarkdownParser.frontString(fm, "errorCode")
+      errorTitle    <- MarkdownParser.frontString(fm, "errorTitle")
+      errorSubtitle <- MarkdownParser.frontString(fm, "errorSubtitle")
+      goHomeLabel   <- MarkdownParser.frontString(fm, "goHomeLabel")
+    yield NotFoundConfig(pageTitle, errorCode, errorTitle, errorSubtitle, goHomeLabel)
+
 // ── Live implementation ───────────────────────────────────────────────────────
 
 object PortfolioServiceLive:
@@ -231,17 +407,32 @@ object PortfolioServiceLive:
   val layer: TaskLayer[PortfolioService] =
     ZLayer.fromZIO(
       for
-        posts    <- PostLoader.loadAll
-        projects <- ProjectLoader.loadAll
-        profile  <- ProfileLoader.load
-      yield Live(profile, projects, posts)
+        layout     <- LayoutLoader.load
+        home       <- HomeLoader.load
+        projects_c <- ProjectsLoader.load
+        blog_c     <- BlogLoader.load
+        notfound_c <- NotFoundLoader.load
+        posts      <- PostLoader.loadAll
+        projects   <- ProjectLoader.loadAll
+        profile    <- ProfileLoader.load
+      yield Live(layout, home, projects_c, blog_c, notfound_c, profile, projects, posts)
     )
 
   private final class Live(
+    layout: LayoutConfig,
+    home: HomeConfig,
+    projectsConfig: ProjectsConfig,
+    blogConfig: BlogConfig,
+    notFoundConfig: NotFoundConfig,
     profile: Profile,
     projects: List[Project],
     posts: List[BlogPost],
   ) extends PortfolioService:
+    def getLayout: UIO[LayoutConfig]                     = ZIO.succeed(layout)
+    def getHomeConfig: UIO[HomeConfig]                   = ZIO.succeed(home)
+    def getProjectsConfig: UIO[ProjectsConfig]           = ZIO.succeed(projectsConfig)
+    def getBlogConfig: UIO[BlogConfig]                   = ZIO.succeed(blogConfig)
+    def getNotFoundConfig: UIO[NotFoundConfig]           = ZIO.succeed(notFoundConfig)
     def getProfile: UIO[Profile]                         = ZIO.succeed(profile)
     def getProjects: UIO[List[Project]]                  = ZIO.succeed(projects)
     def getProject(id: String): UIO[Option[Project]]     = ZIO.succeed(projects.find(_.id == id))

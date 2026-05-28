@@ -58,3 +58,75 @@ case class Profile(
   skills: List[String],
   socials: List[SocialLink],
 ) derives JsonCodec
+
+// ── Layout ───────────────────────────────────────────────────────────────────
+
+case class NavLink(label: String, path: String, isCta: Boolean) derives JsonCodec
+
+case class LayoutConfig(
+  logoText: String,
+  navLinks: List[NavLink],
+  footerCopy: String,
+  footerBuiltWith: String,
+) derives JsonCodec
+
+// ── Home ─────────────────────────────────────────────────────────────────────
+
+case class HomeConfig(
+  pageTitle: String,
+  // Hero
+  heroLabel: String,
+  rolePrefix: String,
+  heroCtaPrimary: String,
+  heroCtaSecondary: String,
+  statYearsValue: String,
+  statYearsLabel: String,
+  // Sections
+  sectionSkills: String,
+  sectionProjects: String,
+  sectionPosts: String,
+  sectionContact: String,
+  seeAllLabel: String,
+  featuredProjectsCount: Int,
+  latestPostsCount: Int,
+  githubLinkLabel: String,
+  liveLinkLabel: String,
+  // Contact
+  contactTitle: String,
+  contactSubtitle: String,
+) derives JsonCodec
+
+// ── Projects page ─────────────────────────────────────────────────────────────
+
+case class ProjectsConfig(
+  pageTitle: String,
+  sectionTag: String,
+  heading: String,
+  subtitle: String,
+  githubLinkLabel: String,
+  liveLinkLabel: String,
+  readSuffix: String,
+) derives JsonCodec
+
+// ── Blog page ─────────────────────────────────────────────────────────────────
+
+case class BlogConfig(
+  pageTitle: String,
+  pageTitleSuffix: String,
+  sectionTag: String,
+  heading: String,
+  subtitle: String,
+  readSuffix: String,
+  readSuffixFull: String,
+  backLabel: String,
+) derives JsonCodec
+
+// ── 404 page ──────────────────────────────────────────────────────────────────
+
+case class NotFoundConfig(
+  pageTitle: String,
+  errorCode: String,
+  errorTitle: String,
+  errorSubtitle: String,
+  goHomeLabel: String,
+) derives JsonCodec

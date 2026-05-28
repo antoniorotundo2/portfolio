@@ -15,11 +15,11 @@ object AppRoutes:
       body    = Body.fromString(content),
     )
 
-  private def notFoundResponse: Response =
+  private def notFoundResponse(layout: portfolio.models.LayoutConfig, nf: portfolio.models.NotFoundConfig): Response =
     Response(
       status  = Status.NotFound,
       headers = Headers(Header.ContentType(MediaType.text.html)),
-      body    = Body.fromString(NotFoundView.render),
+      body    = Body.fromString(NotFoundView.render(layout, nf)),
     )
 
   val routes: zio.http.Routes[PortfolioService, Nothing] =
@@ -59,10 +59,12 @@ object AppRoutes:
         handler { (_: Request) =>
           for {
             svc      <- ZIO.service[PortfolioService]
+            layout   <- svc.getLayout
+            home     <- svc.getHomeConfig
             profile  <- svc.getProfile
             projects <- svc.getProjects
             posts    <- svc.getBlogPosts
-          } yield htmlResponse(HomeView.render(profile, projects, posts))
+          } yield htmlResponse(HomeView.render(layout, home, profile, projects, posts))
         },
 
       // ── Projects ────────────────────────────────────────────────────────────
@@ -70,26 +72,33 @@ object AppRoutes:
         handler { (_: Request) =>
           for {
             svc      <- ZIO.service[PortfolioService]
+            layout   <- svc.getLayout
+            cfg      <- svc.getProjectsConfig
             projects <- svc.getProjects
-          } yield htmlResponse(ProjectsView.render(projects))
+          } yield htmlResponse(ProjectsView.render(layout, cfg, projects))
         },
 
       // ── Blog list ────────────────────────────────────────────────────────────
       Method.GET / "blog" ->
         handler { (_: Request) =>
           for {
-            svc   <- ZIO.service[PortfolioService]
-            posts <- svc.getBlogPosts
-          } yield htmlResponse(BlogView.render(posts))
+            svc    <- ZIO.service[PortfolioService]
+            layout <- svc.getLayout
+            cfg    <- svc.getBlogConfig
+            posts  <- svc.getBlogPosts
+          } yield htmlResponse(BlogView.render(layout, cfg, posts))
         },
 
       // ── Blog post ────────────────────────────────────────────────────────────
       Method.GET / "blog" / string("slug") ->
         handler { (slug: String, _: Request) =>
           for {
-            svc  <- ZIO.service[PortfolioService]
-            post <- svc.getBlogPost(slug)
-          } yield post.fold(notFoundResponse)(p => htmlResponse(BlogPostView.render(p)))
+            svc    <- ZIO.service[PortfolioService]
+            layout <- svc.getLayout
+            cfg    <- svc.getBlogConfig
+            nf     <- svc.getNotFoundConfig
+            post   <- svc.getBlogPost(slug)
+          } yield post.fold(notFoundResponse(layout, nf))(p => htmlResponse(BlogPostView.render(layout, cfg, p)))
         },
 
       // ── JSON API ─────────────────────────────────────────────────────────────
