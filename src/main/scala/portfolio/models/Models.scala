@@ -94,6 +94,7 @@ case class HomeConfig(
   // Contact
   contactTitle: String,
   contactSubtitle: String,
+  readSuffix: String,
 ) derives JsonCodec
 
 // ── Projects page ─────────────────────────────────────────────────────────────
