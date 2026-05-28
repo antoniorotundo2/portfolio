@@ -347,7 +347,15 @@ object ProjectsLoader:
       subtitle        <- MarkdownParser.frontString(fm, "subtitle")
       githubLinkLabel <- MarkdownParser.frontString(fm, "githubLinkLabel")
       liveLinkLabel   <- MarkdownParser.frontString(fm, "liveLinkLabel")
-    yield ProjectsConfig(pageTitle, sectionTag, heading, subtitle, githubLinkLabel, liveLinkLabel)
+    yield ProjectsConfig(
+      pageTitle,
+      sectionTag,
+      heading,
+      subtitle,
+      githubLinkLabel,
+      liveLinkLabel,
+      readSuffix = MarkdownParser.frontString(fm, "readSuffix").getOrElse("min")
+    )
 
 // ── Blog loader ───────────────────────────────────────────────────────────────
 

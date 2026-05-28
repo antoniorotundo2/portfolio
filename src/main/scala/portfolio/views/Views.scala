@@ -212,7 +212,7 @@ object BlogCard:
     article(cls := "post-row")(
       div(cls := "post-meta")(
         time(cls := "post-date")(post.publishedAt),
-        span(cls := "post-read")(s"${post.readingMinutes} ${cfg.readSuffix}"),
+        span(cls := "post-read")(s"${post.readingMinutes} ${readSuffix}"),
       ),
       div(cls := "post-body")(
         a(href := s"/blog/${post.slug}", cls := "post-title")(post.title),
