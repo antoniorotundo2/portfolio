@@ -1,3 +1,4 @@
+// src/main/scala/portfolio/admin/GitHubService.scala
 package portfolio.admin
 
 import zio.*
@@ -6,11 +7,7 @@ import zio.json.*
 import java.time.Instant
 import java.util.Base64
 
-import GitHubFileResponse.given            // 👈 Decoder per leggere le risposte GitHub
-import GitHubCreateUpdateRequest.given     // 👈 Encoder per inviare le richieste di commit
-import GitHubCommitResponse.given          // 👈 Decoder per leggere l'output del commit
-
-// ── DTOs con given espliciti (Opzione B) ──────────────────────────────────
+// ── DTOs con given espliciti ─────────────────────────────────────────────
 
 case class GitHubFileResponse(
   sha: String,
@@ -97,6 +94,7 @@ object GitHubServiceLive:
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = baseUrl + apiPath(s"/contents/$fullPath")
       
+      // 👇 Step 1: Ottieni SHA esistente (fuori dal for per chiarezza)
       val getSha = Client.request(Request.get(url + s"?ref=${AdminConfig.githubBranch}").addHeaders(headers)).flatMap { resp =>
         if resp.status == Status.NotFound then ZIO.succeed(None)
         else if resp.status.isSuccess then
@@ -110,7 +108,9 @@ object GitHubServiceLive:
 
       for
         existingSha <- getSha
-        request = GitHubCreateUpdateRequest(
+        
+        // 👇 Step 2: Crea la request con tipo esplicito (aiuta il compilatore)
+        request: GitHubCreateUpdateRequest = GitHubCreateUpdateRequest(
           message = s"${AdminConfig.commitMessagePrefix} $commitMessage",
           content = encodeBase64(content),
           sha = existingSha,
@@ -118,7 +118,12 @@ object GitHubServiceLive:
           author = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail)),
           committer = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail))
         )
-        response <- Client.request(Request.post(url, Body.fromString(request.toJson)).addHeaders(headers))
+        
+        // 👇 Step 3: Serializza CON METODO ESPLICITO (evita problemi di implicit)
+        requestJson = GitHubCreateUpdateRequest.given.toJson(request)
+        
+        // 👇 Step 4: Invia la richiesta HTTP
+        response <- Client.request(Request.post(url, Body.fromString(requestJson)).addHeaders(headers))
         _ <- ZIO.unless(response.status.isSuccess)(
           response.body.asString.flatMap(b => ZIO.fail(new RuntimeException(s"GitHub commit failed [${response.status}]: $b")))
         )
