@@ -57,7 +57,8 @@ object AdminServiceLive:
 
         val message = new MimeMessage(session)
         message.setFrom(new InternetAddress(AdminConfig.smtpFrom))
-        message.setRecipients(Message.RecipientType.TO, InternetAddress.parse(email))
+        // ✅ Fix: setRecipients prende (RecipientType, Array[Address])
+        message.setRecipients(Message.RecipientType.TO, Array[Address](new InternetAddress(email)))
         message.setSubject("🔐 Codice Admin — Portfolio")
         message.setText(s"Il tuo codice è: $otp\nScade tra ${AdminConfig.otpExpiryMinutes} minuti.", "UTF-8")
         Transport.send(message)

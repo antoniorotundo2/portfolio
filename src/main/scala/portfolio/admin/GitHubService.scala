@@ -61,6 +61,7 @@ object GitHubServiceLive:
         response <- safeRequest(Request.get(url).addHeaders(apiHeaders))
         _ <- ZIO.unless(response.status.isSuccess)(ZIO.fail(new RuntimeException(s"GitHub API error: ${response.status}")))
         body <- response.body.asString
+        // ✅ Usa map invece di fromEither+match per evitare problemi di inferenza
         fileResp <- ZIO.fromEither(body.fromJson[GitHubFileResponse](using GitHubFileResponse.given))
         content <- fileResp.content match
           case Some(b64) => ZIO.succeed(decodeBase64(b64.replace("\n", "")))
@@ -73,16 +74,18 @@ object GitHubServiceLive:
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
 
-      val getSha = safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders)).flatMap { resp =>
-        if resp.status == Status.NotFound then ZIO.succeed(None)
-        else if resp.status.isSuccess then
-          resp.body.asString.flatMap { body =>
-            body.fromJson[GitHubFileResponse](using GitHubFileResponse.given) match
-              case Right(f) => ZIO.succeed(Some(f.sha))
-              case Left(errMsg) => ZIO.fail(new RuntimeException(s"Decode error: $errMsg"))
-          }
-        else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
-      }.catchAll(_ => ZIO.succeed(None))
+      // ✅ Pattern matching esplicito su Either, fuori dal for-comprehension
+      val getSha: ZIO[Client, Throwable, Option[String]] =
+        safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders)).flatMap { resp =>
+          if resp.status == Status.NotFound then ZIO.succeed(None)
+          else if resp.status.isSuccess then
+            resp.body.asString.map { body =>
+              body.fromJson[GitHubFileResponse](using GitHubFileResponse.given) match
+                case Right(f) => Some(f.sha)  // ✅ 'f' è ora in scope correttamente
+                case Left(errMsg) => throw new RuntimeException(s"Decode error: $errMsg")
+            }.catchAll(err => ZIO.fail(new RuntimeException(s"Body parse failed: ${err.getMessage}")))
+          else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
+        }.catchAll(_ => ZIO.succeed(None))
 
       for
         existingSha <- getSha
