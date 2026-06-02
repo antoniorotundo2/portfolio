@@ -5,7 +5,7 @@ object AdminConfig:
 
   val githubToken: String =
     sys.env.getOrElse("GITHUB_TOKEN", throw new RuntimeException("GITHUB_TOKEN non impostato"))
-  val githubOwner: String = sys.env.getOrElse("GITHUB_OWNER", "your-github-username")
+  val githubOwner: String = sys.env.getOrElse("GITHUB_OWNER", "your-username")
   val githubRepo: String = sys.env.getOrElse("GITHUB_REPO", "portfolio")
   val githubBranch: String = sys.env.getOrElse("GITHUB_BRANCH", "main")
   val contentBasePath: String = sys.env.getOrElse("CONTENT_BASE_PATH", "src/main/resources")

@@ -8,7 +8,6 @@ import zio.http.*
 import zio.logging.*
 
 object Main extends ZIOAppDefault:
-
   override val bootstrap: ZLayer[ZIOAppArgs, Any, Any] =
     Runtime.removeDefaultLoggers >>> consoleLogger()
 

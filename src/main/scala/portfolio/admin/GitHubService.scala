@@ -52,7 +52,7 @@ object GitHubServiceLive:
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
     private def safeRequest(req: Request): Task[Response] =
-      ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
+      ZIO.scoped(ZIO.serviceWithZIO[Client](c => c.request(req)))
 
     def getFileContent(path: String): Task[String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"

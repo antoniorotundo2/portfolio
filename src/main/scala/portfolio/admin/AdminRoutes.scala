@@ -51,11 +51,9 @@ object AdminRoutes:
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
     yield Routes(
-
       Method.GET / "admin" -> handler { (_: Request) =>
         ZIO.succeed(Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)), body = Body.fromString(AdminViews.loginPage)))
       },
-
       Method.GET / "admin" / "dashboard" -> handler { (req: Request) =>
         extractToken(req) match
           case Some(token) => adminSvc.isAuthenticated(token).flatMap {
@@ -66,14 +64,12 @@ object AdminRoutes:
           }
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
-
       Method.POST / "admin" / "api" / "request-otp" -> handler { (_: Request) =>
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP inviato"}"""))
           case None => ZIO.succeed(Response.json("""{"error":"Errore generazione OTP"}""").status(Status.InternalServerError))
         }
       },
-
       Method.POST / "admin" / "api" / "verify-otp" -> handler { (req: Request) =>
         req.body.asString.flatMap { body =>
           val otp = body.fromJson[OtpRequest](using OtpRequest.given).toOption.flatMap(_.otp)
@@ -81,29 +77,17 @@ object AdminRoutes:
             case None => ZIO.succeed(Response.json("""{"error":"Campo 'otp' mancante"}""").status(Status.BadRequest))
             case Some(code) => adminSvc.verifyOtp(code).flatMap {
               case Some(token) =>
-                val cookie = Cookie.Response(
-                  name = "admin_session",
-                  content = token,
-                  maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
-                  isHttpOnly = true,
-                  secure = true,
-                  sameSite = Some(Cookie.SameSite.Strict),
-                  path = Some(Path.root / "admin")
-                )
+                val cookie = Cookie.Response(name = "admin_session", content = token, maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)), isHttpOnly = true, secure = true, sameSite = Some(Cookie.SameSite.Strict), path = Some(Path.root / "admin"))
                 ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
               case None => ZIO.succeed(Response.json("""{"error":"Codice non valido"}""").status(Status.Unauthorized))
             }
         }
       },
-
       Method.POST / "admin" / "api" / "logout" -> handler { (req: Request) =>
         extractToken(req) match
-          case Some(token) => adminSvc.logout(token) *> ZIO.succeed(
-            Response.json("""{"success":true}""").addCookie(Cookie.Response(name = "admin_session", content = "", maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin")))
-          )
+          case Some(token) => adminSvc.logout(token) *> ZIO.succeed(Response.json("""{"success":true}""").addCookie(Cookie.Response(name = "admin_session", content = "", maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))))
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
-
       Method.GET / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.listFiles.flatMap { files =>
@@ -114,18 +98,14 @@ object AdminRoutes:
           }
         }(req)
       },
-
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> handler { (section: String, filename: String, req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.readFile(s"$section/$filename").flatMap { content =>
             val resp = FileContentResponse(s"$section/$filename", content)
             ZIO.succeed(jsonResponse(resp)(using FileContentResponse.given))
-          }.catchAll { err =>
-            ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound))
-          }
+          }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound)) }
         }(req)
       },
-
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
@@ -137,9 +117,7 @@ object AdminRoutes:
                   val resp = SaveResponse(success = true, message = "File salvato su GitHub!", commitUrl = commit.html_url, rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti.")
                   ZIO.succeed(jsonResponse(resp)(using SaveResponse.given))
                 }
-              }.catchAll { err =>
-                ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError))
-              }
+              }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError)) }
           }
         }(req)
       }
