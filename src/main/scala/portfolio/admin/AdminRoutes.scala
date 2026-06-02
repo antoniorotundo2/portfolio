@@ -83,10 +83,10 @@ object AdminRoutes:
               case true =>
                 contentSvc.isWritable.map { writable =>
                   Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)), body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true)))
-                }
+                }.orDie
               case false =>
                 ZIO.succeed(Response.redirect(URL.root / "admin"))
-            }.orDie
+            }
           case None =>
             ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
