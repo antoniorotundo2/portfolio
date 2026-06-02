@@ -120,19 +120,21 @@ object AdminRoutes:
         }(req)
       },
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> handler { (section: String, filename: String, req: Request) =>
-        requireAuth(adminSvc) { _ =>
+        val action: Task[Response] = requireAuth(adminSvc) { _ =>
           contentSvc.readFile(s"$section/$filename").flatMap { content =>
             val resp = FileContentResponse(s"$section/$filename", content)
             ZIO.succeed(jsonResponse(resp)(using FileContentResponse.given))
           }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound)) }
         }(req)
+        action
       },
       // Use the helper to avoid scope issues
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
-        requireAuth(adminSvc) { _ =>
+        val action: Task[Response] = requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
             handleSaveFile(adminSvc, contentSvc, portfolio, body)
           }
         }(req)
+        action
       }
     )
