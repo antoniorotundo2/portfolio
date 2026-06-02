@@ -18,4 +18,8 @@ object Main extends ZIOAppDefault:
       .provide(
         Server.defaultWithPort(8080),
         PortfolioServiceLive.layer,
+        Client.live, // 👈 OBBLIGATORIO per GitHubService
+        AdminServiceLive.layer,
+        GitHubServiceLive.layer,
+        ContentServiceLive.layer
       )

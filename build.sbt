@@ -14,26 +14,36 @@ lazy val root = (project in file("."))
       // ZIO Core
       "dev.zio" %% "zio"         % zioVersion,
       "dev.zio" %% "zio-streams" % zioVersion,
+      
       // ZIO HTTP
       "dev.zio" %% "zio-http"    % zioHttpVersion,
-      // ZIO JSON
+      
+      // ZIO JSON (senza derives — useremo given espliciti)
       "dev.zio" %% "zio-json"    % zioJsonVersion,
+      
       // ScalaTags for HTML DSL
       "com.lihaoyi" %% "scalatags" % scalatagsVersion,
+      
       // Markdown rendering
       "org.commonmark" % "commonmark"                    % "0.22.0",
       "org.commonmark" % "commonmark-ext-gfm-tables"     % "0.22.0",
       "org.commonmark" % "commonmark-ext-gfm-strikethrough" % "0.22.0",
+      
       // YAML front matter parsing
       "org.yaml" % "snakeyaml" % "2.2",
+      
       // Logging
       "dev.zio" %% "zio-logging"              % "2.3.0",
       "dev.zio" %% "zio-logging-slf4j-bridge" % "2.3.0",
       "ch.qos.logback" % "logback-classic"    % "1.5.8",
+      
+      // Email sending (Jakarta Mail / Angus Mail per OTP)
+      "org.eclipse.angus" % "angus-mail" % "2.0.3",
     ),
     scalacOptions ++= Seq(
       "-deprecation",
       "-feature",
+      "-Ykind-projector",
     ),
     Compile / mainClass := Some("portfolio.Main"),
     assembly / assemblyMergeStrategy := {

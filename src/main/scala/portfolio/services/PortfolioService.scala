@@ -20,6 +20,9 @@ trait PortfolioService:
   def getProject(id: String): UIO[Option[Project]]
   def getBlogPosts: UIO[List[BlogPost]]
   def getBlogPost(slug: String): UIO[Option[BlogPost]]
+  
+// ── Admin: ricarica tutti i contenuti da disco ──────────────────────────
+  def reload: Task[Unit]
 
 // ── Markdown parser ───────────────────────────────────────────────────────────
 
@@ -412,21 +415,29 @@ object NotFoundLoader:
 
 object PortfolioServiceLive:
 
+  /** Crea il layer. Se CONTENT_DIR è impostato, usa quella cartella; altrimenti il classpath. */
   val layer: TaskLayer[PortfolioService] =
     ZLayer.fromZIO(
       for
-        layout     <- LayoutLoader.load
-        home       <- HomeLoader.load
-        projects_c <- ProjectsLoader.load
-        blog_c     <- BlogLoader.load
-        notfound_c <- NotFoundLoader.load
-        posts      <- PostLoader.loadAll
-        projects   <- ProjectLoader.loadAll
-        profile    <- ProfileLoader.load
-      yield Live(layout, home, projects_c, blog_c, notfound_c, profile, projects, posts)
+        data <- loadAllData
+        ref  <- Ref.make(data)
+      yield ReloadableLive(ref)
     )
 
-  private final class Live(
+  /** Carica tutti i dati da disco/classpath. */
+  private def loadAllData: Task[LoadedData] =
+    for
+      layout      <- LayoutLoader.load
+      home        <- HomeLoader.load
+      projects_c  <- ProjectsLoader.load
+      blog_c      <- BlogLoader.load
+      notfound_c  <- NotFoundLoader.load
+      posts       <- PostLoader.loadAll
+      projects    <- ProjectLoader.loadAll
+      profile     <- ProfileLoader.load
+    yield LoadedData(layout, home, projects_c, blog_c, notfound_c, profile, projects, posts)
+
+  case class LoadedData(
     layout: LayoutConfig,
     home: HomeConfig,
     projectsConfig: ProjectsConfig,
@@ -435,14 +446,25 @@ object PortfolioServiceLive:
     profile: Profile,
     projects: List[Project],
     posts: List[BlogPost],
-  ) extends PortfolioService:
-    def getLayout: UIO[LayoutConfig]                     = ZIO.succeed(layout)
-    def getHomeConfig: UIO[HomeConfig]                   = ZIO.succeed(home)
-    def getProjectsConfig: UIO[ProjectsConfig]           = ZIO.succeed(projectsConfig)
-    def getBlogConfig: UIO[BlogConfig]                   = ZIO.succeed(blogConfig)
-    def getNotFoundConfig: UIO[NotFoundConfig]           = ZIO.succeed(notFoundConfig)
-    def getProfile: UIO[Profile]                         = ZIO.succeed(profile)
-    def getProjects: UIO[List[Project]]                  = ZIO.succeed(projects)
-    def getProject(id: String): UIO[Option[Project]]     = ZIO.succeed(projects.find(_.id == id))
-    def getBlogPosts: UIO[List[BlogPost]]                = ZIO.succeed(posts)
-    def getBlogPost(slug: String): UIO[Option[BlogPost]] = ZIO.succeed(posts.find(_.slug == slug))
+  )
+
+  /** Implementazione che supporta il reload dei dati. */
+  private final class ReloadableLive(ref: Ref[LoadedData]) extends PortfolioService:
+
+    def getLayout: UIO[LayoutConfig]            = ref.get.map(_.layout)
+    def getHomeConfig: UIO[HomeConfig]          = ref.get.map(_.home)
+    def getProjectsConfig: UIO[ProjectsConfig]  = ref.get.map(_.projectsConfig)
+    def getBlogConfig: UIO[BlogConfig]          = ref.get.map(_.blogConfig)
+    def getNotFoundConfig: UIO[NotFoundConfig]  = ref.get.map(_.notFoundConfig)
+    def getProfile: UIO[Profile]                = ref.get.map(_.profile)
+    def getProjects: UIO[List[Project]]         = ref.get.map(_.projects)
+    def getProject(id: String): UIO[Option[Project]] = ref.get.map(_.projects.find(_.id == id))
+    def getBlogPosts: UIO[List[BlogPost]]       = ref.get.map(_.posts)
+    def getBlogPost(slug: String): UIO[Option[BlogPost]] = ref.get.map(_.posts.find(_.slug == slug))
+
+    def reload: Task[Unit] =
+      for
+        newData <- loadAllData
+        _       <- ref.set(newData)
+        _       <- ZIO.logInfo("Contenuti ricaricati da disco")
+      yield ()
