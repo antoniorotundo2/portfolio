@@ -34,17 +34,6 @@ object AdminRoutes:
   private def extractToken(req: Request): Option[String] =
     req.header(Header.Cookie).flatMap(_.value.toCookieMap.get("admin_session"))
 
-  // requireAuth: isAuthenticated is UIO, h may be Task — result is Task[Response]
-  private def requireAuth(adminSvc: AdminService)(h: Request => Task[Response]): Request => Task[Response] = req =>
-    extractToken(req) match
-      case None =>
-        ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
-      case Some(token) =>
-        adminSvc.isAuthenticated(token).flatMap {
-          case true  => h(req)
-          case false => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Session expired"}""")))
-        }
-
   private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
     Response.json(encoder.toJson(value))
 
@@ -56,8 +45,8 @@ object AdminRoutes:
     body.fromJson[SaveFileRequest](using SaveFileRequest.given) match
       case Left(err) =>
         ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
-      case Right(req) =>
-        contentSvc.writeFile(req.path, req.content).flatMap { commit =>
+      case Right(parsed) =>
+        contentSvc.writeFile(parsed.path, parsed.content).flatMap { commit =>
           portfolio.reload.catchAll(_ => ZIO.unit) *>
           ZIO.succeed(jsonResponse(SaveResponse(
             success     = true,
@@ -99,7 +88,7 @@ object AdminRoutes:
                     headers = Headers(Header.ContentType(MediaType.text.html)),
                     body    = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
                   ))
-                }
+                }.orDie
             }
       },
 
@@ -107,17 +96,16 @@ object AdminRoutes:
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP sent"}"""))
           case None    => ZIO.succeed(Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError))
-        }
+        }.orDie
       },
 
       Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
         req.body.asString.flatMap { rawBody =>
-          val maybeOtp = rawBody.fromJson[OtpRequest](using OtpRequest.given).toOption.map(_.otp)
-          maybeOtp match
-            case None =>
+          rawBody.fromJson[OtpRequest](using OtpRequest.given) match
+            case Left(_) =>
               ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
-            case Some(otpValue) =>
-              adminSvc.verifyOtp(otpValue).flatMap {
+            case Right(parsed) =>
+              adminSvc.verifyOtp(parsed.otp).flatMap {
                 case None =>
                   ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
                 case Some(token) =>
@@ -132,7 +120,7 @@ object AdminRoutes:
                   )
                   ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
               }
-        }
+        }.orDie
       },
 
       Method.POST / "admin" / "api" / "logout" -> Handler.fromFunctionZIO[Request] { req =>
@@ -143,45 +131,54 @@ object AdminRoutes:
             adminSvc.logout(token).as(
               Response.json("""{"success":true}""").addCookie(
                 Cookie.Response(
-                  name   = "admin_session",
+                  name    = "admin_session",
                   content = "",
-                  maxAge = Some(java.time.Duration.ZERO),
-                  path   = Some(Path.root / "admin")
+                  maxAge  = Some(java.time.Duration.ZERO),
+                  path    = Some(Path.root / "admin")
                 )
               )
             )
       },
 
       Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        requireAuth(adminSvc) { _ =>
-          contentSvc.listFiles.flatMap { files =>
-            contentSvc.isWritable.map { writable =>
-              jsonResponse(FilesListResponse(
-                files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
-                writable,
-                isGitHubMode = true
-              ))(using FilesListResponse.given)
-            }
-          }
-        }(req)
+        (for
+          _        <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
+                        case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                        case true  => ZIO.unit
+                      }
+          files    <- contentSvc.listFiles
+          writable <- contentSvc.isWritable
+        yield jsonResponse(FilesListResponse(
+          files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
+          writable,
+          isGitHubMode = true
+        ))(using FilesListResponse.given))
+        .catchAll(resp => ZIO.succeed(resp))
       },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
-          requireAuth(adminSvc) { _ =>
-            contentSvc.readFile(s"$section/$filename").flatMap { content =>
-              ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content))(using FileContentResponse.given))
-            }.catchAll { err =>
-              ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound))
-            }
-          }(req)
+          (for
+            _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
+                   case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                   case true  => ZIO.unit
+                 }
+            content <- contentSvc.readFile(s"$section/$filename")
+          yield jsonResponse(FileContentResponse(s"$section/$filename", content))(using FileContentResponse.given))
+          .catchAll { _ =>
+            ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
+          }
         },
 
       Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        requireAuth(adminSvc) { _ =>
-          req.body.asString.flatMap { body =>
-            handleSaveFile(contentSvc, portfolio, body)
-          }
-        }(req)
+        (for
+          _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
+                 case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                 case true  => ZIO.unit
+               }
+          body     <- req.body.asString
+          response <- handleSaveFile(contentSvc, portfolio, body)
+        yield response)
+        .catchAll(resp => ZIO.succeed(resp))
       }
     )
