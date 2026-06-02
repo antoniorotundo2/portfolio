@@ -54,6 +54,10 @@ object GitHubServiceLive:
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
       ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
 
+    // ✅ Helper separato per parsing JSON: evita problemi di scope nel for-comprehension
+    private def parseGitHubFileResponse(body: String): Either[String, GitHubFileResponse] =
+      body.fromJson[GitHubFileResponse](using GitHubFileResponse.given)
+
     def getFileContent(path: String): ZIO[Client, Throwable, String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
@@ -61,8 +65,7 @@ object GitHubServiceLive:
         response <- safeRequest(Request.get(url).addHeaders(apiHeaders))
         _ <- ZIO.unless(response.status.isSuccess)(ZIO.fail(new RuntimeException(s"GitHub API error: ${response.status}")))
         body <- response.body.asString
-        // ✅ Usa map invece di fromEither+match per evitare problemi di inferenza
-        fileResp <- ZIO.fromEither(body.fromJson[GitHubFileResponse](using GitHubFileResponse.given))
+        fileResp <- ZIO.fromEither(parseGitHubFileResponse(body))
         content <- fileResp.content match
           case Some(b64) => ZIO.succeed(decodeBase64(b64.replace("\n", "")))
           case None => fileResp.download_url match
@@ -74,16 +77,16 @@ object GitHubServiceLive:
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
 
-      // ✅ Pattern matching esplicito su Either, fuori dal for-comprehension
+      // ✅ Parsing JSON fuori dal for-comprehension, con helper tipizzato
       val getSha: ZIO[Client, Throwable, Option[String]] =
         safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders)).flatMap { resp =>
           if resp.status == Status.NotFound then ZIO.succeed(None)
           else if resp.status.isSuccess then
-            resp.body.asString.map { body =>
-              body.fromJson[GitHubFileResponse](using GitHubFileResponse.given) match
-                case Right(f) => Some(f.sha)  // ✅ 'f' è ora in scope correttamente
-                case Left(errMsg) => throw new RuntimeException(s"Decode error: $errMsg")
-            }.catchAll(err => ZIO.fail(new RuntimeException(s"Body parse failed: ${err.getMessage}")))
+            resp.body.asString.flatMap { body =>
+              parseGitHubFileResponse(body) match
+                case Right(fileResp) => ZIO.succeed(Some(fileResp.sha))  // ✅ 'fileResp' è tipizzato, .sha esiste
+                case Left(errorMsg) => ZIO.fail(new RuntimeException(s"Decode error: $errorMsg"))
+            }
           else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
         }.catchAll(_ => ZIO.succeed(None))
 
