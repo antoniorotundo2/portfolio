@@ -1,3 +1,4 @@
+// src/main/scala/portfolio/admin/AdminRoutes.scala
 package portfolio.admin
 
 import portfolio.services.PortfolioService
@@ -5,7 +6,13 @@ import zio.*
 import zio.http.*
 import zio.json.*
 
-// ── DTOs con given espliciti (Opzione B) ─────────────────────────────────
+import OtpRequest.given                    // 👈 Decoder per verificare l'OTP
+import SaveFileRequest.given               // 👈 Decoder per ricevere il contenuto del file
+import FilesListResponse.given             // 👈 Encoder per la lista file
+import FileContentResponse.given           // 👈 Encoder per il contenuto singolo
+import SaveResponse.given                  // 👈 Encoder per la risposta di salvataggio
+
+// ── DTOs con given espliciti + import per encoder ────────────────────────
 
 case class OtpRequest(otp: String)
 object OtpRequest:
@@ -53,7 +60,6 @@ object AdminRoutes:
       portfolio  <- ZIO.service[PortfolioService]
     yield Routes(
       
-      // GET /admin — Login page
       Method.GET / "admin" -> handler { (_: Request) =>
         ZIO.succeed(Response(
           status = Status.Ok,
@@ -62,7 +68,6 @@ object AdminRoutes:
         ))
       },
 
-      // GET /admin/dashboard — Dashboard page
       Method.GET / "admin" / "dashboard" -> handler { (req: Request) =>
         extractToken(req) match
           case Some(token) => adminSvc.isAuthenticated(token).flatMap {
@@ -78,7 +83,6 @@ object AdminRoutes:
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
 
-      // POST /admin/api/request-otp — Richiedi OTP
       Method.POST / "admin" / "api" / "request-otp" -> handler { (_: Request) =>
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP inviato"}"""))
@@ -86,7 +90,6 @@ object AdminRoutes:
         }
       },
 
-      // POST /admin/api/verify-otp — Verifica OTP
       Method.POST / "admin" / "api" / "verify-otp" -> handler { (req: Request) =>
         req.body.asString.flatMap { body =>
           val otp = body.fromJson[OtpRequest].toOption.flatMap(_.otp)
@@ -109,7 +112,6 @@ object AdminRoutes:
         }
       },
 
-      // POST /admin/api/logout — Logout
       Method.POST / "admin" / "api" / "logout" -> handler { (req: Request) =>
         extractToken(req) match
           case Some(token) => adminSvc.logout(token) *> ZIO.succeed(
@@ -123,11 +125,11 @@ object AdminRoutes:
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
 
-      // GET /admin/api/files — Lista file
       Method.GET / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.listFiles.flatMap { files =>
             contentSvc.isWritable.map { writable =>
+              import FilesListResponse.given
               Response.json(FilesListResponse(
                 files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
                 writable,
@@ -138,10 +140,10 @@ object AdminRoutes:
         }(req)
       },
 
-      // GET /admin/api/files/{section}/{filename} — Leggi file
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> handler { (section: String, filename: String, req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.readFile(s"$section/$filename").flatMap { content =>
+            import FileContentResponse.given
             ZIO.succeed(Response.json(FileContentResponse(s"$section/$filename", content).toJson))
           }.catchAll { err =>
             ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound))
@@ -149,7 +151,6 @@ object AdminRoutes:
         }(req)
       },
 
-      // POST /admin/api/files — Salva file (commit su GitHub)
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
@@ -157,12 +158,15 @@ object AdminRoutes:
               case Left(err) => ZIO.succeed(Response.json(s"""{"error":"JSON non valido: $err"}""").status(Status.BadRequest))
               case Right(saveReq) => contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
                 portfolio.reload.catchAll(_ => ZIO.unit) *>
-                ZIO.succeed(Response.json(SaveResponse(
-                  success = true,
-                  message = "File salvato su GitHub!",
-                  commitUrl = commit.html_url,
-                  rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti."
-                ).toJson))
+                {
+                  import SaveResponse.given
+                  ZIO.succeed(Response.json(SaveResponse(
+                    success = true,
+                    message = "File salvato su GitHub!",
+                    commitUrl = commit.html_url,
+                    rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti."
+                  ).toJson))
+                }
               }.catchAll { err =>
                 ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError))
               }

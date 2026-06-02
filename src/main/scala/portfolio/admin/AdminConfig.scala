@@ -1,31 +1,43 @@
+// src/main/scala/portfolio/admin/AdminConfig.scala
 package portfolio.admin
 
-import zio.*
-
-/** Configurazione admin — email e credenziali hardcodate.
+/** Configurazione dell'area amministratore.
   *
-  * ⚠️  In produzione, spostare in variabili d'ambiente!
+  * ⚠️  Tutti i segreti DEVONO essere passati come environment variables.
   */
 object AdminConfig:
 
-  // ── Email amministratore (hardcodata) ─────────────────────────────────────
-  val adminEmail: String = "antonio@rotundo.dev"
+  // ── Email amministratore (pubblica) ─────────────────────────────────────
+  val adminEmail: String = 
+    sys.env.getOrElse("ADMIN_EMAIL", "antonio@rotundo.dev")
 
-  // ── SMTP per invio OTP (configura con le tue credenziali) ────────────────
-  val smtpHost: String     = "smtp.gmail.com"
-  val smtpPort: Int        = 587
-  val smtpUser: String     = "antonio@rotundo.dev"
-  val smtpPassword: String = "LA_TUA_APP_PASSWORD_GMAIL"
-  val smtpFrom: String     = s"Portfolio Admin <${smtpUser}>"
+  // ── GitHub API (SEGRETI — obbligatori in production) ────────────────────
+  val githubToken: String =
+    sys.env.getOrElse("GITHUB_TOKEN", 
+      throw new RuntimeException("GITHUB_TOKEN non impostato. Vedi: https://github.com/settings/tokens")
+    )
 
-  // ── OTP settings ──────────────────────────────────────────────────────────
-  val otpLength: Int          = 6
-  val otpExpiryMinutes: Int   = 5
+  val githubOwner: String = sys.env.getOrElse("GITHUB_OWNER", "antoniorotundo2")
+  val githubRepo: String = sys.env.getOrElse("GITHUB_REPO", "portfolio")
+  val githubBranch: String = sys.env.getOrElse("GITHUB_BRANCH", "main")
+  val contentBasePath: String = sys.env.getOrElse("CONTENT_BASE_PATH", "src/main/resources")
+
+  // ── Commit metadata per GitHub ─────────────────────────────────────────
+  val commitAuthorName: String = "Portfolio Admin"
+  val commitAuthorEmail: String = adminEmail
+  val commitMessagePrefix: String = "🤖 Admin update:"
+
+  // ── SMTP per invio OTP (SEGRETI) ───────────────────────────────────────
+  val smtpHost: String = sys.env.getOrElse("SMTP_HOST", "smtp.gmail.com")
+  val smtpPort: Int = sys.env.getOrElse("SMTP_PORT", "587").toInt
+  val smtpUser: String = sys.env.getOrElse("SMTP_USER", adminEmail)
+  val smtpPassword: String =
+    sys.env.getOrElse("SMTP_PASSWORD",
+      throw new RuntimeException("SMTP_PASSWORD non impostato")
+    )
+  val smtpFrom: String = sys.env.getOrElse("SMTP_FROM", s"Portfolio Admin <$smtpUser>")
+
+  // ── OTP e sessioni ─────────────────────────────────────────────────────
+  val otpLength: Int = 6
+  val otpExpiryMinutes: Int = 5
   val sessionExpiryHours: Int = 8
-
-  // ── Content directory ─────────────────────────────────────────────────────
-  // Se impostata, legge/scrive i .md da questa cartella esterna.
-  // Se vuota, usa il classpath (sola lettura).
-  // In sviluppo: CONTENT_DIR=src/main/resources
-  val contentDir: Option[String] =
-    sys.env.get("CONTENT_DIR").filter(_.nonEmpty)

@@ -6,6 +6,10 @@ import zio.json.*
 import java.time.Instant
 import java.util.Base64
 
+import GitHubFileResponse.given            // 👈 Decoder per leggere le risposte GitHub
+import GitHubCreateUpdateRequest.given     // 👈 Encoder per inviare le richieste di commit
+import GitHubCommitResponse.given          // 👈 Decoder per leggere l'output del commit
+
 // ── DTOs con given espliciti (Opzione B) ──────────────────────────────────
 
 case class GitHubFileResponse(
