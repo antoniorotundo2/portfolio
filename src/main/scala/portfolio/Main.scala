@@ -1,4 +1,3 @@
-// src/main/scala/portfolio/Main.scala
 package portfolio
 
 import portfolio.routes.AppRoutes

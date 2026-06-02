@@ -1,12 +1,9 @@
-// src/main/scala/portfolio/admin/AdminRoutes.scala
 package portfolio.admin
 
 import portfolio.services.PortfolioService
 import zio.*
 import zio.http.*
 import zio.json.*
-
-// ── DTOs con given espliciti (Opzione B — no derives) ─────────────────────
 
 case class OtpRequest(otp: String)
 object OtpRequest:
@@ -32,8 +29,6 @@ case class SaveResponse(success: Boolean, message: String, commitUrl: String, re
 object SaveResponse:
   given JsonEncoder[SaveResponse] = DeriveJsonEncoder.gen[SaveResponse]
 
-// ── Routes ───────────────────────────────────────────────────────────────
-
 object AdminRoutes:
 
   private def extractToken(req: Request): Option[String] =
@@ -56,33 +51,22 @@ object AdminRoutes:
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
     yield Routes(
-      
-      // GET /admin — Login page
+
       Method.GET / "admin" -> handler { (_: Request) =>
-        ZIO.succeed(Response(
-          status = Status.Ok,
-          headers = Headers(Header.ContentType(MediaType.text.html)),
-          body = Body.fromString(AdminViews.loginPage)
-        ))
+        ZIO.succeed(Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)), body = Body.fromString(AdminViews.loginPage)))
       },
 
-      // GET /admin/dashboard — Dashboard page
       Method.GET / "admin" / "dashboard" -> handler { (req: Request) =>
         extractToken(req) match
           case Some(token) => adminSvc.isAuthenticated(token).flatMap {
             case true => contentSvc.isWritable.flatMap { writable =>
-              ZIO.succeed(Response(
-                status = Status.Ok,
-                headers = Headers(Header.ContentType(MediaType.text.html)),
-                body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
-              ))
+              ZIO.succeed(Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)), body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))))
             }
             case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
           }
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
 
-      // POST /admin/api/request-otp — Richiedi OTP
       Method.POST / "admin" / "api" / "request-otp" -> handler { (_: Request) =>
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP inviato"}"""))
@@ -90,7 +74,6 @@ object AdminRoutes:
         }
       },
 
-      // POST /admin/api/verify-otp — Verifica OTP
       Method.POST / "admin" / "api" / "verify-otp" -> handler { (req: Request) =>
         req.body.asString.flatMap { body =>
           val otp = body.fromJson[OtpRequest](using OtpRequest.given).toOption.flatMap(_.otp)
@@ -113,49 +96,36 @@ object AdminRoutes:
         }
       },
 
-      // POST /admin/api/logout — Logout
       Method.POST / "admin" / "api" / "logout" -> handler { (req: Request) =>
         extractToken(req) match
           case Some(token) => adminSvc.logout(token) *> ZIO.succeed(
-            Response.json("""{"success":true}""").addCookie(Cookie.Response(
-              name = "admin_session",
-              content = "",
-              maxAge = Some(java.time.Duration.ZERO),
-              path = Some(Path.root / "admin")
-            ))
+            Response.json("""{"success":true}""").addCookie(Cookie.Response(name = "admin_session", content = "", maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin")))
           )
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
 
-      // GET /admin/api/files — Lista file
       Method.GET / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.listFiles.flatMap { files =>
             contentSvc.isWritable.map { writable =>
-              val response = FilesListResponse(
-                files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
-                writable,
-                isGitHubMode = true
-              )
-              jsonResponse(response)(using FilesListResponse.given)
+              val resp = FilesListResponse(files.map(f => FileInfo(f.relativePath, f.displayName, f.section)), writable, isGitHubMode = true)
+              jsonResponse(resp)(using FilesListResponse.given)
             }
           }
         }(req)
       },
 
-      // GET /admin/api/files/{section}/{filename} — Leggi file
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> handler { (section: String, filename: String, req: Request) =>
         requireAuth(adminSvc) { _ =>
           contentSvc.readFile(s"$section/$filename").flatMap { content =>
-            val response = FileContentResponse(s"$section/$filename", content)
-            ZIO.succeed(jsonResponse(response)(using FileContentResponse.given))
+            val resp = FileContentResponse(s"$section/$filename", content)
+            ZIO.succeed(jsonResponse(resp)(using FileContentResponse.given))
           }.catchAll { err =>
             ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound))
           }
         }(req)
       },
 
-      // POST /admin/api/files — Salva file (commit su GitHub)
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
@@ -164,13 +134,8 @@ object AdminRoutes:
               case Right(saveReq) => contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
                 portfolio.reload.catchAll(_ => ZIO.unit) *>
                 {
-                  val response = SaveResponse(
-                    success = true,
-                    message = "File salvato su GitHub!",
-                    commitUrl = commit.html_url,
-                    rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti."
-                  )
-                  ZIO.succeed(jsonResponse(response)(using SaveResponse.given))
+                  val resp = SaveResponse(success = true, message = "File salvato su GitHub!", commitUrl = commit.html_url, rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti.")
+                  ZIO.succeed(jsonResponse(resp)(using SaveResponse.given))
                 }
               }.catchAll { err =>
                 ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError))
