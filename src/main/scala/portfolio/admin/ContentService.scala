@@ -12,8 +12,7 @@ trait ContentService:
 case class ContentFile(relativePath: String, displayName: String, section: String)
 
 object ContentServiceLive:
-  val layer: ZLayer[GitHubService, Nothing, ContentService] =
-    ZLayer.fromFunction(Live.apply)
+  val layer: ZLayer[GitHubService, Nothing, ContentService] = ZLayer.fromFunction(Live.apply)
 
   private final class Live(gh: GitHubService) extends ContentService:
     private val knownFiles: List[ContentFile] = List(

@@ -51,7 +51,6 @@ object GitHubServiceLive:
     private def decodeBase64(s: String): String =
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
-    // ✅ Firma corretta: richiede Client, gestisce Scope internamente
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
       ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
 
@@ -78,10 +77,9 @@ object GitHubServiceLive:
         if resp.status == Status.NotFound then ZIO.succeed(None)
         else if resp.status.isSuccess then
           resp.body.asString.flatMap { body =>
-            // ✅ Pattern matching diretto sull'Either (evita conflitti con ZIO)
             body.fromJson[GitHubFileResponse](using GitHubFileResponse.given) match
               case Right(f) => ZIO.succeed(Some(f.sha))
-              case Left(err) => ZIO.fail(new RuntimeException(s"Decode error: $err"))
+              case Left(errMsg) => ZIO.fail(new RuntimeException(s"Decode error: $errMsg"))
           }
         else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
       }.catchAll(_ => ZIO.succeed(None))
