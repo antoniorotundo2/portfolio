@@ -12,7 +12,7 @@ object Main extends ZIOAppDefault:
     Runtime.removeDefaultLoggers >>> consoleLogger()
 
   override def run: ZIO[ZIOAppArgs & Scope, Any, Any] =
-    ZIO.logInfo("🚀 Portfolio starting on http://localhost:8080") *>
+    ZIO.logInfo("Portfolio starting on http://localhost:8080") *>
     ZIO.serviceWithZIO[PortfolioService & AdminService & ContentService & Client] { _ =>
       AppRoutes.routes
     }.flatten.flatMap { routes =>

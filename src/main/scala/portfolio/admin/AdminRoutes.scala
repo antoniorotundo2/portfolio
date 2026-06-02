@@ -36,16 +36,16 @@ object AdminRoutes:
 
   private def requireAuth(adminSvc: AdminService)(handler: Request => Task[Response]): Request => Task[Response] = req =>
     extractToken(req) match
-      case None => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Non autenticato"}""")))
+      case None => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
       case Some(token) => adminSvc.isAuthenticated(token).flatMap {
         case true  => handler(req)
-        case false => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Sessione scaduta"}""")))
+        case false => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Session expired"}""")))
       }
 
   private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
     Response.json(encoder.toJson(value))
 
-  // ✅ Helper separato per gestire il salvataggio: evita problemi di scope in Scala 3
+  // Separate helper to handle file saving: avoids scope issues in Scala 3
   private def handleSaveFile(
     adminSvc: AdminService,
     contentSvc: ContentService,
@@ -53,17 +53,17 @@ object AdminRoutes:
     body: String
   ): ZIO[Any, Nothing, Response] =
     body.fromJson[SaveFileRequest](using SaveFileRequest.given) match
-      case Left(err) => 
-        ZIO.succeed(Response.json(s"""{"error":"JSON non valido: $err"}""").status(Status.BadRequest))
-      case Right(saveReq) => 
+      case Left(err) =>
+        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
+      case Right(saveReq) =>
         contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
           portfolio.reload.catchAll(_ => ZIO.unit) *>
           ZIO.succeed {
-            val resp = SaveResponse(success = true, message = "File salvato su GitHub!", commitUrl = commit.html_url, rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti.")
+            val resp = SaveResponse(success = true, message = "File saved to GitHub!", commitUrl = commit.html_url, rebuildNote = "The site will update automatically on Render in ~1-2 minutes.")
             jsonResponse(resp)(using SaveResponse.given)
           }
-        }.catchAll { err => 
-          ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError)) 
+        }.catchAll { err =>
+          ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
         }
 
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
@@ -87,20 +87,20 @@ object AdminRoutes:
       },
       Method.POST / "admin" / "api" / "request-otp" -> handler { (_: Request) =>
         adminSvc.requestOtp.flatMap {
-          case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP inviato"}"""))
-          case None => ZIO.succeed(Response.json("""{"error":"Errore generazione OTP"}""").status(Status.InternalServerError))
+          case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP sent"}"""))
+          case None => ZIO.succeed(Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError))
         }
       },
       Method.POST / "admin" / "api" / "verify-otp" -> handler { (req: Request) =>
         req.body.asString.flatMap { body =>
           val otp = body.fromJson[OtpRequest](using OtpRequest.given).toOption.flatMap(_.otp)
           otp match
-            case None => ZIO.succeed(Response.json("""{"error":"Campo 'otp' mancante"}""").status(Status.BadRequest))
+            case None => ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
             case Some(code) => adminSvc.verifyOtp(code).flatMap {
               case Some(token) =>
                 val cookie = Cookie.Response(name = "admin_session", content = token, maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)), isHttpOnly = true, secure = true, sameSite = Some(Cookie.SameSite.Strict), path = Some(Path.root / "admin"))
                 ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
-              case None => ZIO.succeed(Response.json("""{"error":"Codice non valido"}""").status(Status.Unauthorized))
+              case None => ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
             }
         }
       },
@@ -127,7 +127,7 @@ object AdminRoutes:
           }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound)) }
         }(req)
       },
-      // ✅ Usa l'helper per evitare problemi di scope
+      // Use the helper to avoid scope issues
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>

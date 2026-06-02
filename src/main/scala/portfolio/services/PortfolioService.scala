@@ -21,7 +21,7 @@ trait PortfolioService:
   def getBlogPosts: UIO[List[BlogPost]]
   def getBlogPost(slug: String): UIO[Option[BlogPost]]
   
-// ── Admin: ricarica tutti i contenuti da disco ──────────────────────────
+// ── Admin: reload all content from disk ───────────────────────────────────
   def reload: Task[Unit]
 
 // ── Markdown parser ───────────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ object NotFoundLoader:
 
 object PortfolioServiceLive:
 
-  /** Crea il layer. Se CONTENT_DIR è impostato, usa quella cartella; altrimenti il classpath. */
+  /** Creates the layer. If CONTENT_DIR is set, uses that folder; otherwise falls back to the classpath. */
   val layer: TaskLayer[PortfolioService] =
     ZLayer.fromZIO(
       for

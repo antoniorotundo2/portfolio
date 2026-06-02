@@ -54,7 +54,7 @@ object GitHubServiceLive:
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
       ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
 
-    // ✅ Helper: parsing JSON con errore Throwable (non String)
+    // Helper: parse JSON with Throwable error (not String)
     private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
       body.fromJson[GitHubFileResponse](using GitHubFileResponse.given)
         .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
@@ -62,8 +62,8 @@ object GitHubServiceLive:
     def getFileContent(path: String): ZIO[Client, Throwable, String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
-      
-      // ✅ Catena esplicita: tutti i rami hanno ZIO[Client, Throwable, String]
+
+      // Explicit chain: all branches return ZIO[Client, Throwable, String]
       safeRequest(Request.get(url).addHeaders(apiHeaders))
         .flatMap { response =>
           if !response.status.isSuccess then
@@ -75,15 +75,15 @@ object GitHubServiceLive:
                   case Left(err) => ZIO.fail(err)
                   case Right(fileResp) =>
                     fileResp.content match
-                      case Some(b64) => 
-                        // ✅ Wrappa valore puro in ZIO.succeed per mantenere l'environment Client
+                      case Some(b64) =>
+                        // Wrap pure value in ZIO.succeed to keep Client environment
                         ZIO.succeed(decodeBase64(b64.replace("\n", "")))
                       case None =>
                         fileResp.download_url match
-                          case Some(dlUrl) => 
-                            // ✅ safeRequest richiede Client: OK, tutto coerente
+                          case Some(dlUrl) =>
+                            // safeRequest requires Client: consistent
                             safeRequest(Request.get(dlUrl)).flatMap(_.body.asString)
-                          case None => 
+                          case None =>
                             ZIO.fail(new RuntimeException("No content available"))
               }
         }

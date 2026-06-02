@@ -14,13 +14,13 @@ object AdminServiceLive:
   val layer: ZLayer[Any, Nothing, AdminService] =
     ZLayer.fromZIO {
       for
-        otpStore <- Ref.make(Map.empty[String, OtpEntry])
-        sessionStore <- Ref.make(Map.empty[String, AdminSession])  // ✅ Rinominato per evitare conflitti
+        otpStore     <- Ref.make(Map.empty[String, OtpEntry])
+        sessionStore <- Ref.make(Map.empty[String, AdminSession])  // Renamed to avoid conflicts
       yield Live(otpStore, sessionStore)
     }
 
   case class OtpEntry(code: String, expiresAt: Instant)
-  case class AdminSession(expiresAt: Instant)  // ✅ Nome univoco, nessun conflitto con jakarta.mail.Session
+  case class AdminSession(expiresAt: Instant)  // Unique name, no conflict with jakarta.mail.Session
 
   private final class Live(
     otpStore: Ref[Map[String, OtpEntry]],
@@ -50,7 +50,7 @@ object AdminServiceLive:
         props.put("mail.smtp.host", AdminConfig.smtpHost)
         props.put("mail.smtp.port", AdminConfig.smtpPort.toString)
 
-        // ✅ Usa il nome completo per evitare ambiguità con AdminSession
+        // Use fully qualified name to avoid ambiguity with AdminSession
         val mailSession = jakarta.mail.Session.getInstance(props, new Authenticator:
           override def getPasswordAuthentication =
             new PasswordAuthentication(AdminConfig.smtpUser, AdminConfig.smtpPassword)
@@ -59,8 +59,8 @@ object AdminServiceLive:
         val message = new MimeMessage(mailSession)
         message.setFrom(new InternetAddress(AdminConfig.smtpFrom))
         message.setRecipients(Message.RecipientType.TO, Array[Address](new InternetAddress(email)))
-        message.setSubject("🔐 Codice Admin — Portfolio")
-        message.setText(s"Il tuo codice è: $otp\nScade tra ${AdminConfig.otpExpiryMinutes} minuti.", "UTF-8")
+        message.setSubject("Admin Code — Portfolio")
+        message.setText(s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes.", "UTF-8")
         Transport.send(message)
       }.catchAll(err => ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")).ignore
 
@@ -86,7 +86,7 @@ object AdminServiceLive:
             ZIO.logWarning("Invalid OTP").as(None)
           case Some(_) =>
             val token = generateToken()
-            val session = AdminSession(Instant.now().plusSeconds(AdminConfig.sessionExpiryHours * 3600L))  // ✅ AdminSession
+            val session = AdminSession(Instant.now().plusSeconds(AdminConfig.sessionExpiryHours * 3600L))
             for
               _ <- otpStore.update(_ - email)
               _ <- sessionStore.update(_.updated(token, session))
