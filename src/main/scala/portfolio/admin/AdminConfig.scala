@@ -12,7 +12,7 @@ object AdminConfig:
 
   val commitAuthorName: String = "Portfolio Admin"
   val commitAuthorEmail: String = adminEmail
-  val commitMessagePrefix: String = "🤖 Admin update:"
+  val commitMessagePrefix: String = "Admin update:"
 
   val smtpHost: String = sys.env.getOrElse("SMTP_HOST", "smtp.gmail.com")
   val smtpPort: Int = sys.env.getOrElse("SMTP_PORT", "587").toInt

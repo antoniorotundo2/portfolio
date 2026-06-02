@@ -54,41 +54,57 @@ object GitHubServiceLive:
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
       ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
 
-    // ✅ Helper separato per parsing JSON: evita problemi di scope nel for-comprehension
-    private def parseGitHubFileResponse(body: String): Either[String, GitHubFileResponse] =
+    // ✅ Helper: parsing JSON con errore Throwable (non String)
+    private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
       body.fromJson[GitHubFileResponse](using GitHubFileResponse.given)
+        .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
 
     def getFileContent(path: String): ZIO[Client, Throwable, String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
-      for
-        response <- safeRequest(Request.get(url).addHeaders(apiHeaders))
-        _ <- ZIO.unless(response.status.isSuccess)(ZIO.fail(new RuntimeException(s"GitHub API error: ${response.status}")))
-        body <- response.body.asString
-        fileResp <- ZIO.fromEither(parseGitHubFileResponse(body))
-        content <- fileResp.content match
-          case Some(b64) => ZIO.succeed(decodeBase64(b64.replace("\n", "")))
-          case None => fileResp.download_url match
-            case Some(dlUrl) => safeRequest(Request.get(dlUrl)).flatMap(_.body.asString)
-            case None => ZIO.fail(new RuntimeException("No content available"))
-      yield content
+      
+      // ✅ Catena esplicita: tutti i rami hanno ZIO[Client, Throwable, String]
+      safeRequest(Request.get(url).addHeaders(apiHeaders))
+        .flatMap { response =>
+          if !response.status.isSuccess then
+            ZIO.fail(new RuntimeException(s"GitHub API error: ${response.status}"))
+          else
+            response.body.asString
+              .flatMap { body =>
+                parseGitHubFileResponse(body) match
+                  case Left(err) => ZIO.fail(err)
+                  case Right(fileResp) =>
+                    fileResp.content match
+                      case Some(b64) => 
+                        // ✅ Wrappa valore puro in ZIO.succeed per mantenere l'environment Client
+                        ZIO.succeed(decodeBase64(b64.replace("\n", "")))
+                      case None =>
+                        fileResp.download_url match
+                          case Some(dlUrl) => 
+                            // ✅ safeRequest richiede Client: OK, tutto coerente
+                            safeRequest(Request.get(dlUrl)).flatMap(_.body.asString)
+                          case None => 
+                            ZIO.fail(new RuntimeException("No content available"))
+              }
+        }
 
     def updateFile(path: String, content: String, commitMessage: String): ZIO[Client, Throwable, GitHubCommitResult] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
 
-      // ✅ Parsing JSON fuori dal for-comprehension, con helper tipizzato
       val getSha: ZIO[Client, Throwable, Option[String]] =
-        safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders)).flatMap { resp =>
-          if resp.status == Status.NotFound then ZIO.succeed(None)
-          else if resp.status.isSuccess then
-            resp.body.asString.flatMap { body =>
-              parseGitHubFileResponse(body) match
-                case Right(fileResp) => ZIO.succeed(Some(fileResp.sha))  // ✅ 'fileResp' è tipizzato, .sha esiste
-                case Left(errorMsg) => ZIO.fail(new RuntimeException(s"Decode error: $errorMsg"))
-            }
-          else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
-        }.catchAll(_ => ZIO.succeed(None))
+        safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders))
+          .flatMap { resp =>
+            if resp.status == Status.NotFound then ZIO.succeed(None)
+            else if resp.status.isSuccess then
+              resp.body.asString.flatMap { body =>
+                parseGitHubFileResponse(body) match
+                  case Right(fileResp) => ZIO.succeed(Some(fileResp.sha))
+                  case Left(err) => ZIO.fail(err)
+              }
+            else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
+          }
+          .catchAll(_ => ZIO.succeed(None))
 
       for
         existingSha <- getSha
@@ -106,5 +122,8 @@ object GitHubServiceLive:
           response.body.asString.flatMap(b => ZIO.fail(new RuntimeException(s"Commit failed [${response.status}]: $b")))
         )
         resultBody <- response.body.asString
-        commitResp <- ZIO.fromEither(resultBody.fromJson[GitHubCommitResponse](using GitHubCommitResponse.given))
+        commitResp <- ZIO.fromEither(
+          resultBody.fromJson[GitHubCommitResponse](using GitHubCommitResponse.given)
+            .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
+        )
       yield commitResp.commit
