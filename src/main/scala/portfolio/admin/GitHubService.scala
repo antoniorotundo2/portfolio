@@ -27,8 +27,8 @@ object GitHubCommitResponse:
   given JsonDecoder[GitHubCommitResponse] = DeriveJsonDecoder.gen[GitHubCommitResponse]
 
 trait GitHubService:
-  def getFileContent(path: String): Task[String]
-  def updateFile(path: String, content: String, commitMessage: String): Task[GitHubCommitResult]
+  def getFileContent(path: String): ZIO[Client, Throwable, String]
+  def updateFile(path: String, content: String, commitMessage: String): ZIO[Client, Throwable, GitHubCommitResult]
 
 object GitHubServiceLive:
   val layer: ZLayer[Any, Nothing, GitHubService] = ZLayer.succeed(Live())
@@ -51,10 +51,11 @@ object GitHubServiceLive:
     private def decodeBase64(s: String): String =
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
-    private def safeRequest(req: Request): Task[Response] =
-      ZIO.scoped(ZIO.serviceWithZIO[Client](c => c.request(req)))
+    // ✅ Firma corretta: richiede Client, gestisce Scope internamente
+    private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
+      ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
 
-    def getFileContent(path: String): Task[String] =
+    def getFileContent(path: String): ZIO[Client, Throwable, String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
       for
@@ -69,7 +70,7 @@ object GitHubServiceLive:
             case None => ZIO.fail(new RuntimeException("No content available"))
       yield content
 
-    def updateFile(path: String, content: String, commitMessage: String): Task[GitHubCommitResult] =
+    def updateFile(path: String, content: String, commitMessage: String): ZIO[Client, Throwable, GitHubCommitResult] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
 
@@ -77,7 +78,8 @@ object GitHubServiceLive:
         if resp.status == Status.NotFound then ZIO.succeed(None)
         else if resp.status.isSuccess then
           resp.body.asString.flatMap { body =>
-            ZIO.fromEither(body.fromJson[GitHubFileResponse](using GitHubFileResponse.given)) match
+            // ✅ Pattern matching diretto sull'Either (evita conflitti con ZIO)
+            body.fromJson[GitHubFileResponse](using GitHubFileResponse.given) match
               case Right(f) => ZIO.succeed(Some(f.sha))
               case Left(err) => ZIO.fail(new RuntimeException(s"Decode error: $err"))
           }

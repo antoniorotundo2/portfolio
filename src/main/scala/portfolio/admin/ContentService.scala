@@ -1,11 +1,12 @@
 package portfolio.admin
 
 import zio.*
+import zio.http.*
 
 trait ContentService:
   def listFiles: Task[List[ContentFile]]
-  def readFile(relativePath: String): Task[String]
-  def writeFile(relativePath: String, content: String): Task[GitHubCommitResult]
+  def readFile(relativePath: String): ZIO[Client, Throwable, String]
+  def writeFile(relativePath: String, content: String): ZIO[Client, Throwable, GitHubCommitResult]
   def isWritable: UIO[Boolean]
 
 case class ContentFile(relativePath: String, displayName: String, section: String)
@@ -26,5 +27,5 @@ object ContentServiceLive:
 
     def isWritable: UIO[Boolean] = ZIO.succeed(AdminConfig.githubToken.nonEmpty)
     def listFiles: Task[List[ContentFile]] = ZIO.succeed(knownFiles)
-    def readFile(p: String): Task[String] = gh.getFileContent(p)
-    def writeFile(p: String, c: String): Task[GitHubCommitResult] = gh.updateFile(p, c, s"Update $p")
+    def readFile(p: String): ZIO[Client, Throwable, String] = gh.getFileContent(p)
+    def writeFile(p: String, c: String): ZIO[Client, Throwable, GitHubCommitResult] = gh.updateFile(p, c, s"Update $p")
