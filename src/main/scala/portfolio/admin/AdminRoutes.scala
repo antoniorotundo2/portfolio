@@ -34,11 +34,11 @@ object AdminRoutes:
   private def extractToken(req: Request): Option[String] =
     req.header(Header.Cookie).flatMap(_.value.toCookieMap.get("admin_session"))
 
-  private def requireAuth(adminSvc: AdminService)(handler: Request => Task[Response]): Request => Task[Response] = req =>
+  private def requireAuth(adminSvc: AdminService)(h: Request => Task[Response]): Request => Task[Response] = req =>
     extractToken(req) match
       case None => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
       case Some(token) => adminSvc.isAuthenticated(token).flatMap {
-        case true  => handler(req)
+        case true  => h(req)
         case false => ZIO.succeed(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Session expired"}""")))
       }
 
@@ -51,7 +51,7 @@ object AdminRoutes:
     contentSvc: ContentService,
     portfolio: PortfolioService,
     body: String
-  ): ZIO[Any, Nothing, Response] =
+  ): Task[Response] =
     body.fromJson[SaveFileRequest](using SaveFileRequest.given) match
       case Left(err) =>
         ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
@@ -72,10 +72,10 @@ object AdminRoutes:
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
     yield Routes(
-      Method.GET / "admin" -> handler { (_: Request) =>
+      Method.GET / "admin" -> Handler.fromFunctionZIO[Request] { _ =>
         ZIO.succeed(Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)), body = Body.fromString(AdminViews.loginPage)))
       },
-      Method.GET / "admin" / "dashboard" -> handler { (req: Request) =>
+      Method.GET / "admin" / "dashboard" -> Handler.fromFunctionZIO[Request] { req =>
         extractToken(req) match
           case Some(token) => adminSvc.isAuthenticated(token).flatMap {
             case true => contentSvc.isWritable.flatMap { writable =>
@@ -85,13 +85,13 @@ object AdminRoutes:
           }
           case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
-      Method.POST / "admin" / "api" / "request-otp" -> handler { (_: Request) =>
+      Method.POST / "admin" / "api" / "request-otp" -> Handler.fromFunctionZIO[Request] { _ =>
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP sent"}"""))
-          case None => ZIO.succeed(Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError))
+          case None    => ZIO.succeed(Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError))
         }
       },
-      Method.POST / "admin" / "api" / "verify-otp" -> handler { (req: Request) =>
+      Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
         req.body.asString.flatMap { body =>
           val otp = body.fromJson[OtpRequest](using OtpRequest.given).toOption.flatMap(_.otp)
           otp match
@@ -104,12 +104,12 @@ object AdminRoutes:
             }
         }
       },
-      Method.POST / "admin" / "api" / "logout" -> handler { (req: Request) =>
+      Method.POST / "admin" / "api" / "logout" -> Handler.fromFunctionZIO[Request] { req =>
         extractToken(req) match
           case Some(token) => adminSvc.logout(token) *> ZIO.succeed(Response.json("""{"success":true}""").addCookie(Cookie.Response(name = "admin_session", content = "", maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))))
-          case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
+          case None        => ZIO.succeed(Response.redirect(URL.root / "admin"))
       },
-      Method.GET / "admin" / "api" / "files" -> handler { (req: Request) =>
+      Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
         requireAuth(adminSvc) { _ =>
           contentSvc.listFiles.flatMap { files =>
             contentSvc.isWritable.map { writable =>
@@ -119,22 +119,21 @@ object AdminRoutes:
           }
         }(req)
       },
-      Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> handler { (section: String, filename: String, req: Request) =>
-        val action: Task[Response] = requireAuth(adminSvc) { _ =>
+      Method.GET / "admin" / "api" / "files" / string("section") / string("filename") -> Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
+        requireAuth(adminSvc) { _ =>
           contentSvc.readFile(s"$section/$filename").flatMap { content =>
             val resp = FileContentResponse(s"$section/$filename", content)
             ZIO.succeed(jsonResponse(resp)(using FileContentResponse.given))
-          }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound)) }
+          }.catchAll { err =>
+            ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.NotFound))
+          }
         }(req)
-        action
       },
-      // Use the helper to avoid scope issues
-      Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
-        val action: Task[Response] = requireAuth(adminSvc) { _ =>
+      Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
+        requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
             handleSaveFile(adminSvc, contentSvc, portfolio, body)
           }
         }(req)
-        action
       }
     )
