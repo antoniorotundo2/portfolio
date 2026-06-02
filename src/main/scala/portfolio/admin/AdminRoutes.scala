@@ -109,15 +109,17 @@ object AdminRoutes:
       Method.POST / "admin" / "api" / "files" -> handler { (req: Request) =>
         requireAuth(adminSvc) { _ =>
           req.body.asString.flatMap { body =>
+            // ✅ Parsing fuori dal for-comprehension per evitare scope issues
             body.fromJson[SaveFileRequest](using SaveFileRequest.given) match
               case Left(err) => ZIO.succeed(Response.json(s"""{"error":"JSON non valido: $err"}""").status(Status.BadRequest))
-              case Right(saveReq) => contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                portfolio.reload.catchAll(_ => ZIO.unit) *>
-                {
-                  val resp = SaveResponse(success = true, message = "File salvato su GitHub!", commitUrl = commit.html_url, rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti.")
-                  ZIO.succeed(jsonResponse(resp)(using SaveResponse.given))
-                }
-              }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError)) }
+              case Right(saveReq) =>  // ✅ saveReq ora è in scope correttamente
+                contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                  portfolio.reload.catchAll(_ => ZIO.unit) *>
+                  {
+                    val resp = SaveResponse(success = true, message = "File salvato su GitHub!", commitUrl = commit.html_url, rebuildNote = "Il sito si aggiornerà automaticamente su Render tra ~1-2 minuti.")
+                    ZIO.succeed(jsonResponse(resp)(using SaveResponse.given))
+                  }
+                }.catchAll { err => ZIO.succeed(Response.json(s"""{"error":"Errore salvataggio: ${err.getMessage}"}""").status(Status.InternalServerError)) }
           }
         }(req)
       }

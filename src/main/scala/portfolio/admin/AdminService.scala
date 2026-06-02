@@ -15,16 +15,16 @@ object AdminServiceLive:
     ZLayer.fromZIO {
       for
         otpStore <- Ref.make(Map.empty[String, OtpEntry])
-        sessionStore <- Ref.make(Map.empty[String, Session])
+        sessionStore <- Ref.make(Map.empty[String, AdminSession])  // ✅ Rinominato per evitare conflitti
       yield Live(otpStore, sessionStore)
     }
 
   case class OtpEntry(code: String, expiresAt: Instant)
-  case class Session(expiresAt: Instant)
+  case class AdminSession(expiresAt: Instant)  // ✅ Nome univoco, nessun conflitto con jakarta.mail.Session
 
   private final class Live(
     otpStore: Ref[Map[String, OtpEntry]],
-    sessionStore: Ref[Map[String, Session]]
+    sessionStore: Ref[Map[String, AdminSession]]
   ) extends AdminService:
 
     private val random = new SecureRandom()
@@ -50,14 +50,14 @@ object AdminServiceLive:
         props.put("mail.smtp.host", AdminConfig.smtpHost)
         props.put("mail.smtp.port", AdminConfig.smtpPort.toString)
 
-        val session = Session.getInstance(props, new Authenticator:
+        // ✅ Usa il nome completo per evitare ambiguità con AdminSession
+        val mailSession = jakarta.mail.Session.getInstance(props, new Authenticator:
           override def getPasswordAuthentication =
             new PasswordAuthentication(AdminConfig.smtpUser, AdminConfig.smtpPassword)
         )
 
-        val message = new MimeMessage(session)
+        val message = new MimeMessage(mailSession)
         message.setFrom(new InternetAddress(AdminConfig.smtpFrom))
-        // ✅ Fix: setRecipients prende (RecipientType, Array[Address])
         message.setRecipients(Message.RecipientType.TO, Array[Address](new InternetAddress(email)))
         message.setSubject("🔐 Codice Admin — Portfolio")
         message.setText(s"Il tuo codice è: $otp\nScade tra ${AdminConfig.otpExpiryMinutes} minuti.", "UTF-8")
@@ -86,7 +86,7 @@ object AdminServiceLive:
             ZIO.logWarning("Invalid OTP").as(None)
           case Some(_) =>
             val token = generateToken()
-            val session = Session(Instant.now().plusSeconds(AdminConfig.sessionExpiryHours * 3600L))
+            val session = AdminSession(Instant.now().plusSeconds(AdminConfig.sessionExpiryHours * 3600L))  // ✅ AdminSession
             for
               _ <- otpStore.update(_ - email)
               _ <- sessionStore.update(_.updated(token, session))

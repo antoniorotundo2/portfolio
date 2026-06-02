@@ -1,7 +1,6 @@
 package portfolio.admin
 
-import scalatags.Text.all.*
-import scalatags.Text.tags.style  // ✅ Importa il TAG <style>, non l'attributo
+import scalatags.Text.all.*  // ✅ 'style' è già qui come tag <style>
 
 object AdminViews:
   private val headBlock = head(
@@ -11,7 +10,7 @@ object AdminViews:
     link(rel := "preconnect", href := "https://fonts.googleapis.com"),
     link(rel := "stylesheet", href := "https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap"),
     link(rel := "stylesheet", href := "/static/css/main.css"),
-    style(raw(adminCss))  // ✅ Ora 'style' è il tag <style>, accetta raw(...)
+    style(raw(adminCss))  // ✅ style è il tag <style>, raw(...) inserisce CSS puro
   )
 
   val loginPage: String = "<!DOCTYPE html>" + html(lang := "en")(headBlock, body(cls := "admin-body")(div(cls := "admin-container")(div(cls := "admin-card")(h1(cls := "admin-title")("[ Admin ]"), p(cls := "admin-subtitle")("Inserisci la tua email per ricevere il codice."), div(id := "step-request")(div(cls := "form-group")(label(`for` := "email")("Email"), input(`type` := "email", id := "email", value := AdminConfig.adminEmail, readonly := true, cls := "admin-input")), button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Richiedi Codice OTP")), div(id := "step-verify", display.none)(p(cls := "admin-hint")(s"Codice inviato a ${AdminConfig.adminEmail}"), div(cls := "form-group")(label(`for` := "otp")("Codice a 6 cifre"), input(`type` := "text", id := "otp", maxlength := "6", placeholder := "000000", cls := "admin-input admin-otp-input")), button(cls := "btn btn-primary admin-btn", onclick := "verifyOtp()")("Accedi"), button(cls := "btn btn-ghost admin-btn", onclick := "backToRequest()")("← Indietro")), div(id := "message", cls := "admin-message"))), script(raw(loginJs)))).render
