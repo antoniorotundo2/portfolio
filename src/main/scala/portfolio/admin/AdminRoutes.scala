@@ -40,7 +40,6 @@ object AdminRoutes:
   private val notAuthenticated: UIO[Response] =
     ZIO.succeed(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
 
-  // isAuthenticated returns UIO[Boolean] — entire withAuth is UIO[Response]
   private def withAuth(adminSvc: AdminService, req: Request)(action: UIO[Response]): UIO[Response] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
       case false => notAuthenticated
@@ -51,14 +50,12 @@ object AdminRoutes:
     contentSvc: ContentService,
     portfolio: PortfolioService,
     body: String
-  ): Task[Response] =
-    // Assign to val first — avoids Scala 3 indent-syntax parse ambiguity on chained .method match
-    val parsed = body.fromJson[SaveFileRequest](using SaveFileRequest.given)
-    parsed match
-      case Left(err) =>
-        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
-      case Right(req) =>
-        contentSvc.writeFile(req.path, req.content).flatMap { commit =>
+  ): Task[Response] = {
+    body.fromJson[SaveFileRequest](using SaveFileRequest.given) match {
+      case Left(parseErr) =>
+        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
+      case Right(saveReq) =>
+        contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
           portfolio.reload.catchAll(_ => ZIO.unit) *>
           ZIO.succeed(jsonResponse(SaveResponse(
             success     = true,
@@ -66,9 +63,11 @@ object AdminRoutes:
             commitUrl   = commit.html_url,
             rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
           ))(using SaveResponse.given))
-        }.catchAll { err =>
-          ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
+        }.catchAll { saveErr =>
+          ZIO.succeed(Response.json(s"""{"error":"Save error: ${saveErr.getMessage}"}""").status(Status.InternalServerError))
         }
+    }
+  }
 
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
@@ -86,27 +85,24 @@ object AdminRoutes:
       },
 
       Method.GET / "admin" / "dashboard" -> Handler.fromFunctionZIO[Request] { req =>
-        extractToken(req) match
+        extractToken(req) match {
           case None =>
             ZIO.succeed(Response.redirect(URL.root / "admin"))
           case Some(token) =>
-            // isAuthenticated: UIO — flatMap stays UIO; isWritable: UIO — no orDie needed
             adminSvc.isAuthenticated(token).flatMap {
-              case false =>
-                ZIO.succeed(Response.redirect(URL.root / "admin"))
-              case true =>
-                contentSvc.isWritable.map { writable =>
-                  Response(
-                    status  = Status.Ok,
-                    headers = Headers(Header.ContentType(MediaType.text.html)),
-                    body    = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
-                  )
-                }
+              case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
+              case true  => contentSvc.isWritable.map { writable =>
+                Response(
+                  status  = Status.Ok,
+                  headers = Headers(Header.ContentType(MediaType.text.html)),
+                  body    = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
+                )
+              }
             }
+        }
       },
 
       Method.POST / "admin" / "api" / "request-otp" -> Handler.fromFunctionZIO[Request] { _ =>
-        // requestOtp is Task — orDie converts to UIO
         adminSvc.requestOtp.flatMap {
           case Some(_) => ZIO.succeed(Response.json("""{"message":"OTP sent"}"""))
           case None    => ZIO.succeed(Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError))
@@ -114,15 +110,11 @@ object AdminRoutes:
       },
 
       Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
-        // req.body.asString is Task — orDie at the end converts to UIO
         req.body.asString.flatMap { rawBody =>
-          // Assign to val to avoid parse ambiguity
-          val decoded = rawBody.fromJson[OtpRequest](using OtpRequest.given)
-          decoded match
+          rawBody.fromJson[OtpRequest](using OtpRequest.given) match {
             case Left(_) =>
               ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
             case Right(otpReq) =>
-              // verifyOtp is Task
               adminSvc.verifyOtp(otpReq.otp).flatMap {
                 case None =>
                   ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
@@ -137,15 +129,15 @@ object AdminRoutes:
                   )
                   ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
               }
+          }
         }.orDie
       },
 
       Method.POST / "admin" / "api" / "logout" -> Handler.fromFunctionZIO[Request] { req =>
-        extractToken(req) match
+        extractToken(req) match {
           case None =>
             ZIO.succeed(Response.redirect(URL.root / "admin"))
           case Some(token) =>
-            // logout is UIO — as stays UIO
             adminSvc.logout(token).as(
               Response.json("""{"success":true}""").addCookie(
                 Cookie.Response(
@@ -156,10 +148,10 @@ object AdminRoutes:
                 )
               )
             )
+        }
       },
 
       Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        // listFiles and isWritable are Task — orDie inside action converts to UIO
         withAuth(adminSvc, req) {
           contentSvc.listFiles.flatMap { files =>
             contentSvc.isWritable.map { writable =>
