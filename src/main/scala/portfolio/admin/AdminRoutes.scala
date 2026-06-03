@@ -46,12 +46,18 @@ object AdminRoutes:
       case true  => action
     }
 
+  private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
+    summon[JsonDecoder[SaveFileRequest]].decodeJson(body)
+
+  private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
+    summon[JsonDecoder[OtpRequest]].decodeJson(body)
+
   private def handleSaveFile(
     contentSvc: ContentService,
     portfolio: PortfolioService,
     body: String
-  ): Task[Response] = {
-    body.fromJson[SaveFileRequest](using SaveFileRequest.given) match {
+  ): Task[Response] =
+    decodeSaveRequest(body) match {
       case Left(parseErr) =>
         ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
       case Right(saveReq) =>
@@ -62,12 +68,11 @@ object AdminRoutes:
             message     = "File saved to GitHub!",
             commitUrl   = commit.html_url,
             rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-          ))(using SaveResponse.given))
+          )))
         }.catchAll { saveErr =>
           ZIO.succeed(Response.json(s"""{"error":"Save error: ${saveErr.getMessage}"}""").status(Status.InternalServerError))
         }
     }
-  }
 
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
@@ -111,7 +116,7 @@ object AdminRoutes:
 
       Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
         req.body.asString.flatMap { rawBody =>
-          rawBody.fromJson[OtpRequest](using OtpRequest.given) match {
+          decodeOtpRequest(rawBody) match {
             case Left(_) =>
               ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
             case Right(otpReq) =>
@@ -159,7 +164,7 @@ object AdminRoutes:
                 files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
                 writable,
                 isGitHubMode = true
-              ))(using FilesListResponse.given)
+              ))
             }
           }.orDie
         }
@@ -169,7 +174,7 @@ object AdminRoutes:
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
           withAuth(adminSvc, req) {
             contentSvc.readFile(s"$section/$filename").flatMap { content =>
-              ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content))(using FileContentResponse.given))
+              ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
             }.catchAll { _ =>
               ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
             }
