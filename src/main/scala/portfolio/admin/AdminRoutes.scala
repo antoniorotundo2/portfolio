@@ -150,7 +150,7 @@ object AdminRoutes:
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
           checkAuth(adminSvc, req).flatMap {
-            case false => ZIO.succeed(notAuthenticated)
+            case false => ZIO.succeed(notAuthenticated): ZIO[Client, Nothing, Response]
             case true  =>
               contentSvc.readFile(s"$section/$filename").flatMap { content =>
                 ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
@@ -162,10 +162,10 @@ object AdminRoutes:
 
       Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
         checkAuth(adminSvc, req).flatMap {
-          case false => ZIO.succeed(notAuthenticated)
+          case false => ZIO.succeed(notAuthenticated): ZIO[Client, Nothing, Response]
           case true  =>
             req.body.asString.flatMap { body =>
-              decodeSaveRequest(body) match {
+              val decoded: ZIO[Client, Nothing, Response] = decodeSaveRequest(body) match {
                 case Left(parseErr) =>
                   ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
                 case Right(saveReq) =>
@@ -181,6 +181,7 @@ object AdminRoutes:
                     ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
                   }
               }
+              decoded
             }.orDie
         }
       }
