@@ -37,13 +37,18 @@ object AdminRoutes:
   private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
     Response.json(encoder.toJson(value))
 
-  private val notAuthenticated: UIO[Response] =
-    ZIO.succeed(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
+  private val notAuthenticated: Response =
+    Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}"""))
 
-  private def withAuth(adminSvc: AdminService, req: Request)(action: UIO[Response]): UIO[Response] =
+  // withAuth accepts any ZIO[R, Throwable, Response] and returns ZIO[R, Nothing, Response]
+  private def withAuth[R](adminSvc: AdminService, req: Request)(
+    action: ZIO[R, Throwable, Response]
+  ): ZIO[R, Nothing, Response] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-      case false => notAuthenticated
-      case true  => action
+      case false => ZIO.succeed(notAuthenticated)
+      case true  => action.catchAll { err =>
+        ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.InternalServerError))
+      }
     }
 
   private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
@@ -56,7 +61,7 @@ object AdminRoutes:
     contentSvc: ContentService,
     portfolio: PortfolioService,
     body: String
-  ): Task[Response] =
+  ): ZIO[Client, Nothing, Response] =
     decodeSaveRequest(body) match {
       case Left(parseErr) =>
         ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
@@ -166,7 +171,7 @@ object AdminRoutes:
                 isGitHubMode = true
               ))
             }
-          }.orDie
+          }
         }
       },
 
@@ -185,7 +190,7 @@ object AdminRoutes:
         withAuth(adminSvc, req) {
           req.body.asString.flatMap { body =>
             handleSaveFile(contentSvc, portfolio, body)
-          }.orDie
+          }
         }
       }
     )
