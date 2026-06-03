@@ -4,10 +4,6 @@ import scalatags.Text.all.*
 
 object AdminViews:
 
-  private val loginJs = """const messageEl=document.getElementById('message');function showMessage(t,y){messageEl.textContent=t;messageEl.className='admin-message '+y}async function requestOtp(){showMessage('Sending...','success');try{const r=await fetch('/admin/api/request-otp',{method:'POST'}),d=await r.json();r.ok?(showMessage('OK: '+d.message,'success'),document.getElementById('step-request').style.display='none',document.getElementById('step-verify').style.display='block',document.getElementById('otp').focus()):showMessage('Error: '+d.error,'error')}catch(e){showMessage('Error: '+e.message,'error')}}async function verifyOtp(){const c=document.getElementById('otp').value.trim();if(c.length!==6){showMessage('6-digit code required','error');return}showMessage('Verifying...','success');try{const r=await fetch('/admin/api/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:c})});r.ok?window.location.href='/admin/dashboard':showMessage('Error: '+(await r.json()).error,'error')}catch(e){showMessage('Error: '+e.message,'error')}}function backToRequest(){document.getElementById('step-request').style.display='block';document.getElementById('step-verify').style.display='none';messageEl.className='admin-message'}document.getElementById('otp')?.addEventListener('keydown',e=>{if(e.key==='Enter')verifyOtp()});"""
-
-  private val dashboardJs = """let currentFile=null;async function loadFiles(){try{const r=await fetch('/admin/api/files');if(r.status===401){window.location.href='/admin';return}const d=await r.json();renderFileList(d.files)}catch(e){console.error(e)}}function renderFileList(files){const c=document.getElementById('file-list');c.innerHTML='';const s={};files.forEach(f=>{if(!s[f.section])s[f.section]=[];s[f.section].push(f)});Object.entries(s).forEach(([sec,fs])=>{const l=document.createElement('div');l.className='file-section-label';l.textContent='// '+sec;c.appendChild(l);fs.forEach(f=>{const b=document.createElement('button');b.className='file-item';b.textContent=f.displayName||f.path;b.dataset.path=f.path;b.onclick=()=>openFile(f.path,b);c.appendChild(b)})})}async function openFile(p,b){document.querySelectorAll('.file-item').forEach(el=>el.classList.remove('active'));if(b)b.classList.add('active');try{const r=await fetch('/admin/api/files/'+p);if(r.status===401){window.location.href='/admin';return}const d=await r.json();currentFile=p;document.getElementById('editor-filename').textContent=p;document.getElementById('editor-content').value=d.content;document.getElementById('editor-placeholder').style.display='none';document.getElementById('editor-container').style.display='flex';document.getElementById('editor-container').style.flexDirection='column';document.getElementById('editor-container').style.flex='1';document.getElementById('save-status').textContent=''}catch(e){console.error(e)}}async function saveFile(){if(!currentFile)return;const s=document.getElementById('save-status');s.textContent='Committing...';s.className='save-status';try{const c=document.getElementById('editor-content').value,r=await fetch('/admin/api/files',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:currentFile,content:c})});if(r.status===401){window.location.href='/admin';return}const d=await r.json();d.success?(s.innerHTML=`OK: ${d.message}<br><small><a href="${d.commitUrl}" target="_blank" style="color:#00ff88">View commit</a> - ${d.rebuildNote}</small>`,s.className='save-status success'):(s.textContent='Error: '+d.error,s.className='save-status error')}catch(e){s.textContent='Error: '+e.message;s.className='save-status error'}setTimeout(()=>{if(!s.textContent.includes('View commit'))s.textContent=''},1e4)}async function logout(){await fetch('/admin/api/logout',{method:'POST'});window.location.href='/admin'}document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key==='s'){e.preventDefault();saveFile()}});loadFiles();"""
-
   private val headBlock = head(
     meta(charset := "utf-8"),
     meta(name := "viewport", content := "width=device-width, initial-scale=1"),
@@ -18,9 +14,83 @@ object AdminViews:
     link(rel := "stylesheet", href := "/static/css/admin.css")
   )
 
-  val loginPage: String = "<!DOCTYPE html>" + html(lang := "en")(headBlock, body(cls := "admin-body")(div(cls := "admin-container")(div(cls := "admin-card")(h1(cls := "admin-title")("[ Admin ]"), p(cls := "admin-subtitle")("Enter your email to receive the code."), div(id := "step-request")(div(cls := "form-group")(label(`for` := "email")("Email"), input(`type` := "email", id := "email", value := AdminConfig.adminEmail, readonly := true, cls := "admin-input")), button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Request OTP Code")), div(id := "step-verify", display.none)(p(cls := "admin-hint")(s"Code sent to ${AdminConfig.adminEmail}"), div(cls := "form-group")(label(`for` := "otp")("6-digit code"), input(`type` := "text", id := "otp", maxlength := "6", placeholder := "000000", cls := "admin-input admin-otp-input")), button(cls := "btn btn-primary admin-btn", onclick := "verifyOtp()")("Sign In"), button(cls := "btn btn-ghost admin-btn", onclick := "backToRequest()")("Back")), div(id := "message", cls := "admin-message"))), script(raw(loginJs)))).render
+  val loginPage: String =
+    "<!DOCTYPE html>" + html(lang := "en")(
+      headBlock,
+      body(cls := "admin-body")(
+        div(cls := "admin-container")(
+          div(cls := "admin-card")(
+            h1(cls := "admin-title")("[ Admin ]"),
+            p(cls := "admin-subtitle")("Enter your email to receive the code."),
+            div(id := "step-request")(
+              div(cls := "form-group")(
+                label(`for` := "email")("Email"),
+                input(
+                  `type` := "email",
+                  id := "email",
+                  value := AdminConfig.adminEmail,
+                  readonly := true,
+                  cls := "admin-input"
+                )
+              ),
+              button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Request OTP Code")
+            ),
+            div(id := "step-verify", display.none)(
+              p(cls := "admin-hint")(s"Code sent to ${AdminConfig.adminEmail}"),
+              div(cls := "form-group")(
+                label(`for` := "otp")("6-digit code"),
+                input(
+                  `type` := "text",
+                  id := "otp",
+                  maxlength := "6",
+                  placeholder := "000000",
+                  cls := "admin-input admin-otp-input"
+                )
+              ),
+              button(cls := "btn btn-primary admin-btn", onclick := "verifyOtp()")("Sign In"),
+              button(cls := "btn btn-ghost admin-btn", onclick := "backToRequest()")("Back")
+            ),
+            div(id := "message", cls := "admin-message")
+          )
+        ),
+        script(src := "/static/js/admin-login.js")
+      )
+    ).render
 
   def dashboardPage(isWritable: Boolean, isGitHubMode: Boolean): String =
     val badge = if isGitHubMode then "admin-badge-info" else "admin-badge-warn"
-    val text = if isGitHubMode then "GitHub active" else "Read-only"
-    "<!DOCTYPE html>" + html(lang := "en")(headBlock, body(cls := "admin-body")(div(cls := "admin-dashboard")(div(cls := "admin-header")(h1(cls := "admin-title")("[ Admin Dashboard ]"), div(cls := "admin-header-actions")(span(cls := s"admin-badge $badge")(text), button(cls := "btn btn-ghost", onclick := "logout()")("Logout"))), div(cls := "admin-layout")(div(cls := "admin-sidebar")(h3(cls := "sidebar-title")("Sections"), div(id := "file-list", cls := "file-list")), div(cls := "admin-editor")(div(id := "editor-placeholder", cls := "editor-placeholder")("Select a file"), div(id := "editor-container", display.none)(div(cls := "editor-header")(h2(id := "editor-filename", cls := "editor-filename")(""), div(cls := "editor-actions")(span(id := "save-status", cls := "save-status")(""), button(cls := "btn btn-primary", onclick := "saveFile()")("Save"))), textarea(id := "editor-content", cls := "editor-textarea", spellcheck := "false"))))), script(raw(dashboardJs))))).render
+    val text  = if isGitHubMode then "GitHub active" else "Read-only"
+    "<!DOCTYPE html>" + html(lang := "en")(
+      headBlock,
+      body(cls := "admin-body")(
+        div(cls := "admin-dashboard")(
+          div(cls := "admin-header")(
+            h1(cls := "admin-title")("[ Admin Dashboard ]"),
+            div(cls := "admin-header-actions")(
+              span(cls := s"admin-badge $badge")(text),
+              button(cls := "btn btn-ghost", onclick := "logout()")("Logout")
+            )
+          ),
+          div(cls := "admin-layout")(
+            div(cls := "admin-sidebar")(
+              h3(cls := "sidebar-title")("Sections"),
+              div(id := "file-list", cls := "file-list")
+            ),
+            div(cls := "admin-editor")(
+              div(id := "editor-placeholder", cls := "editor-placeholder")("Select a file"),
+              div(id := "editor-container", display.none)(
+                div(cls := "editor-header")(
+                  h2(id := "editor-filename", cls := "editor-filename")(""),
+                  div(cls := "editor-actions")(
+                    span(id := "save-status", cls := "save-status")(""),
+                    button(cls := "btn btn-primary", onclick := "saveFile()")("Save")
+                  )
+                ),
+                textarea(id := "editor-content", cls := "editor-textarea", spellcheck := "false")
+              )
+            )
+          )
+        ),
+        script(src := "/static/js/admin-dashboard.js")
+      )
+    ).render

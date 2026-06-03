@@ -52,11 +52,11 @@ object GitHubServiceLive:
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
-      ZIO.scoped(ZIO.serviceWithZIO[Client](_.request(req)))
+      ZIO.scoped(ZIO.serviceWithZIO[Client](_.batched(req)))
 
     // Helper: parse JSON with Throwable error (not String)
     private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
-      body.fromJson[GitHubFileResponse](using GitHubFileResponse.given)
+      body.fromJson[GitHubFileResponse]
         .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
 
     def getFileContent(path: String): ZIO[Client, Throwable, String] =
@@ -116,14 +116,14 @@ object GitHubServiceLive:
           author = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail)),
           committer = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail))
         )
-        requestJson = GitHubCreateUpdateRequest.given.toJson(request)
+        requestJson = summon[JsonEncoder[GitHubCreateUpdateRequest]].encodeJson(request, None).toString
         response <- safeRequest(Request.post(url, Body.fromString(requestJson)).addHeaders(apiHeaders))
         _ <- ZIO.unless(response.status.isSuccess)(
           response.body.asString.flatMap(b => ZIO.fail(new RuntimeException(s"Commit failed [${response.status}]: $b")))
         )
         resultBody <- response.body.asString
         commitResp <- ZIO.fromEither(
-          resultBody.fromJson[GitHubCommitResponse](using GitHubCommitResponse.given)
+          resultBody.fromJson[GitHubCommitResponse]
             .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
         )
       yield commitResp.commit

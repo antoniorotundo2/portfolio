@@ -22,8 +22,8 @@ object AppRoutes:
       body    = Body.fromString(NotFoundView.render(layout, nf)),
     )
 
-  val routes: zio.http.Routes[PortfolioService, Nothing] =
-    zio.http.Routes(
+  val routes: Routes[PortfolioService, Nothing] =
+    Routes(
 
       // ── Static files ────────────────────────────────────────────────────────
       Method.GET / "static" / "css" / string("file") ->
