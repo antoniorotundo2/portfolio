@@ -1,0 +1,46 @@
+# ── macOS metadata ────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+Icon\r
+
+# Thumbnails
+ehthumbs.db
+ehthumbs_vista.db
+
+# ── Scala / sbt ───────────────────────────────────────────────────────────────
+target/
+project/target/
+project/project/
+.bsp/
+.metals/
+.bloop/
+*.class
+*.jar
+*.war
+*.ear
+
+# sbt specific
+.cache
+.history
+.lib/
+dist/*
+/.sbt
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.idea_modules/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# ── Runtime / OS ──────────────────────────────────────────────────────────────
+*.log
+*.pid
+.env
+.env.local
