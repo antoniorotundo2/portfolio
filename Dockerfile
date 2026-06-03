@@ -1,8 +1,8 @@
 # ── Stage 1: build ───────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk AS builder
+FROM eclipse-temurin:25-jdk AS builder
 
 RUN apt-get update && apt-get install -y curl unzip && \
-    curl -fL "https://github.com/sbt/sbt/releases/download/v1.10.1/sbt-1.10.1.zip" \
+    curl -fL "https://github.com/sbt/sbt/releases/download/v1.12.11/sbt-1.12.11.zip" \
          -o /tmp/sbt.zip && \
     unzip /tmp/sbt.zip -d /opt && \
     ln -s /opt/sbt/bin/sbt /usr/local/bin/sbt && \
@@ -22,9 +22,9 @@ COPY src ./src
 RUN sbt assembly
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 WORKDIR /app
-COPY --from=builder /build/target/scala-3.4.2/portfolio-assembly-0.1.0.jar app.jar
+COPY --from=builder /build/target/scala-*/portfolio-assembly-*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \
