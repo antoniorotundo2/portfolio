@@ -37,6 +37,17 @@ object AdminRoutes:
   private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
     Response.json(encoder.toJson(value))
 
+  private val notAuthenticated: UIO[Response] =
+    ZIO.succeed(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
+
+  // Auth check: isAuthenticated returns UIO[Boolean], so the whole thing is UIO[Boolean]
+  // We flatMap into a UIO[Response] in each handler
+  private def withAuth(adminSvc: AdminService, req: Request)(action: UIO[Response]): UIO[Response] =
+    adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
+      case false => notAuthenticated
+      case true  => action
+    }
+
   private def handleSaveFile(
     contentSvc: ContentService,
     portfolio: PortfolioService,
@@ -140,44 +151,35 @@ object AdminRoutes:
       },
 
       Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        (for
-          _        <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                        case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
-                        case true  => ZIO.unit
-                      }
-          files    <- contentSvc.listFiles
-          writable <- contentSvc.isWritable
-        yield jsonResponse(FilesListResponse(
-          files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
-          writable,
-          isGitHubMode = true
-        ))(using FilesListResponse.given))
-        .catchAll(resp => ZIO.succeed(resp))
+        withAuth(adminSvc, req) {
+          contentSvc.listFiles.flatMap { files =>
+            contentSvc.isWritable.map { writable =>
+              jsonResponse(FilesListResponse(
+                files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
+                writable,
+                isGitHubMode = true
+              ))(using FilesListResponse.given)
+            }
+          }.orDie
+        }
       },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
-          (for
-            _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                   case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
-                   case true  => ZIO.unit
-                 }
-            content <- contentSvc.readFile(s"$section/$filename")
-          yield jsonResponse(FileContentResponse(s"$section/$filename", content))(using FileContentResponse.given))
-          .catchAll { _ =>
-            ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
+          withAuth(adminSvc, req) {
+            contentSvc.readFile(s"$section/$filename").flatMap { content =>
+              ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content))(using FileContentResponse.given))
+            }.catchAll { _ =>
+              ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
+            }
           }
         },
 
       Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        (for
-          _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                 case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
-                 case true  => ZIO.unit
-               }
-          body     <- req.body.asString
-          response <- handleSaveFile(contentSvc, portfolio, body)
-        yield response)
-        .catchAll(resp => ZIO.succeed(resp))
+        withAuth(adminSvc, req) {
+          req.body.asString.flatMap { body =>
+            handleSaveFile(contentSvc, portfolio, body)
+          }.orDie
+        }
       }
     )
