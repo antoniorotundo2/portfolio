@@ -114,7 +114,6 @@ object AdminRoutes:
                     content    = token,
                     maxAge     = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
                     isHttpOnly = true,
-                    secure     = true,
                     sameSite   = Some(Cookie.SameSite.Strict),
                     path       = Some(Path.root / "admin")
                   )
@@ -143,7 +142,7 @@ object AdminRoutes:
       Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
         (for
           _        <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                        case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                        case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
                         case true  => ZIO.unit
                       }
           files    <- contentSvc.listFiles
@@ -160,7 +159,7 @@ object AdminRoutes:
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
           (for
             _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                   case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                   case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
                    case true  => ZIO.unit
                  }
             content <- contentSvc.readFile(s"$section/$filename")
@@ -173,7 +172,7 @@ object AdminRoutes:
       Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
         (for
           _ <- adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-                 case false => ZIO.fail(Response.status(Status.Unauthorized).body(Body.fromString("""{"error":"Not authenticated"}""")))
+                 case false => ZIO.fail(Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}""")))
                  case true  => ZIO.unit
                }
           body     <- req.body.asString
