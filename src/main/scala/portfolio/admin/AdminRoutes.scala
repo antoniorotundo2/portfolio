@@ -40,44 +40,14 @@ object AdminRoutes:
   private val notAuthenticated: Response =
     Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}"""))
 
-  // withAuth accepts any ZIO[R, Throwable, Response] and returns ZIO[R, Nothing, Response]
-  private def withAuth[R](adminSvc: AdminService, req: Request)(
-    action: ZIO[R, Throwable, Response]
-  ): ZIO[R, Nothing, Response] =
-    adminSvc.isAuthenticated(extractToken(req).getOrElse("")).flatMap {
-      case false => ZIO.succeed(notAuthenticated)
-      case true  => action.catchAll { err =>
-        ZIO.succeed(Response.json(s"""{"error":"${err.getMessage}"}""").status(Status.InternalServerError))
-      }
-    }
+  private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
+    adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
 
   private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
     summon[JsonDecoder[SaveFileRequest]].decodeJson(body)
 
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
-
-  private def handleSaveFile(
-    contentSvc: ContentService,
-    portfolio: PortfolioService,
-    body: String
-  ): ZIO[Client, Nothing, Response] =
-    decodeSaveRequest(body) match {
-      case Left(parseErr) =>
-        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
-      case Right(saveReq) =>
-        contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-          portfolio.reload.catchAll(_ => ZIO.unit) *>
-          ZIO.succeed(jsonResponse(SaveResponse(
-            success     = true,
-            message     = "File saved to GitHub!",
-            commitUrl   = commit.html_url,
-            rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-          )))
-        }.catchAll { saveErr =>
-          ZIO.succeed(Response.json(s"""{"error":"Save error: ${saveErr.getMessage}"}""").status(Status.InternalServerError))
-        }
-    }
 
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
@@ -162,35 +132,56 @@ object AdminRoutes:
       },
 
       Method.GET / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        withAuth(adminSvc, req) {
-          contentSvc.listFiles.flatMap { files =>
-            contentSvc.isWritable.map { writable =>
-              jsonResponse(FilesListResponse(
-                files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
-                writable,
-                isGitHubMode = true
-              ))
-            }
-          }
+        checkAuth(adminSvc, req).flatMap {
+          case false => ZIO.succeed(notAuthenticated)
+          case true  =>
+            contentSvc.listFiles.flatMap { files =>
+              contentSvc.isWritable.map { writable =>
+                jsonResponse(FilesListResponse(
+                  files.map(f => FileInfo(f.relativePath, f.displayName, f.section)),
+                  writable,
+                  isGitHubMode = true
+                ))
+              }
+            }.orDie
         }
       },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
-          withAuth(adminSvc, req) {
-            contentSvc.readFile(s"$section/$filename").flatMap { content =>
-              ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
-            }.catchAll { _ =>
-              ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
-            }
+          checkAuth(adminSvc, req).flatMap {
+            case false => ZIO.succeed(notAuthenticated)
+            case true  =>
+              contentSvc.readFile(s"$section/$filename").flatMap { content =>
+                ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
+              }.catchAll { _ =>
+                ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
+              }
           }
         },
 
       Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        withAuth(adminSvc, req) {
-          req.body.asString.flatMap { body =>
-            handleSaveFile(contentSvc, portfolio, body)
-          }
+        checkAuth(adminSvc, req).flatMap {
+          case false => ZIO.succeed(notAuthenticated)
+          case true  =>
+            req.body.asString.flatMap { body =>
+              decodeSaveRequest(body) match {
+                case Left(parseErr) =>
+                  ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
+                case Right(saveReq) =>
+                  contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                    portfolio.reload.catchAll(_ => ZIO.unit) *>
+                    ZIO.succeed(jsonResponse(SaveResponse(
+                      success     = true,
+                      message     = "File saved to GitHub!",
+                      commitUrl   = commit.html_url,
+                      rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                    )))
+                  }.catchAll { err =>
+                    ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
+                  }
+              }
+            }.orDie
         }
       }
     )
