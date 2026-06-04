@@ -49,9 +49,9 @@ object AdminServiceLive:
         props.put("mail.smtp.starttls.enable", "true")
         props.put("mail.smtp.host", AdminConfig.smtpHost)
         props.put("mail.smtp.port", AdminConfig.smtpPort.toString)
-        props.put("mail.smtp.connectiontimeout", "5000")   // 5 secondi
-        props.put("mail.smtp.timeout", "5000")             // 5 secondi
-        props.put("mail.smtp.writetimeout", "5000")        // 5 secondi
+        props.put("mail.smtp.connectiontimeout", "5000")
+        props.put("mail.smtp.timeout", "5000")
+        props.put("mail.smtp.writetimeout", "5000")
 
         val mailSession = jakarta.mail.Session.getInstance(props, new Authenticator:
           override def getPasswordAuthentication =
@@ -64,12 +64,9 @@ object AdminServiceLive:
         message.setSubject("Admin Code — Portfolio")
         message.setText(s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes.", "UTF-8")
         Transport.send(message)
+      }.catchAll { err =>
+        ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")
       }
-        .timeout(10.seconds)  // timeout massimo 10 secondi
-        .catchAll { err =>
-          ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp") *>
-          ZIO.succeed(())  // non bloccare, continua comunque
-        }
 
     def requestOtp: Task[Option[String]] =
       val email = AdminConfig.adminEmail
@@ -77,7 +74,7 @@ object AdminServiceLive:
       val entry = OtpEntry(otp, Instant.now().plusSeconds(AdminConfig.otpExpiryMinutes * 60L))
       for
         _ <- otpStore.update(_.updated(email, entry))
-        _ <- sendOtpEmail(email, otp).fork  // invia in background, non bloccare la risposta
+        _ <- sendOtpEmail(email, otp).fork
         _ <- ZIO.logInfo(s"OTP generated for $email: $otp")
       yield Some(otp)
 
