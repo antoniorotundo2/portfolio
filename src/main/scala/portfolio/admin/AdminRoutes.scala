@@ -95,7 +95,7 @@ object AdminRoutes:
                     }
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer).orDie
+          } yield result).provide(adminLayer ++ contentLayer).catchAll(_ => ZIO.succeed(Response.internalServerError))
         },
 
       Method.POST / "admin" / "api" / "request-otp" ->
@@ -106,7 +106,7 @@ object AdminRoutes:
               case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
             }
             .provide(adminLayer)
-            .orDie
+            .catchAll(_ => ZIO.succeed(Response.internalServerError))
         },
 
       Method.POST / "admin" / "api" / "verify-otp" ->
@@ -132,7 +132,7 @@ object AdminRoutes:
                   }
               }
             }
-          } yield result).provide(adminLayer).orDie
+          } yield result).provide(adminLayer).catchAll(_ => ZIO.succeed(Response.internalServerError))
         },
 
       Method.POST / "admin" / "api" / "logout" ->
@@ -148,7 +148,7 @@ object AdminRoutes:
                   )
                 )
             }
-          }.provide(adminLayer).orDie
+          }.provide(adminLayer).catchAll(_ => ZIO.succeed(Response.internalServerError))
         },
 
       Method.POST / "admin" / "api" / "files" ->
@@ -178,7 +178,7 @@ object AdminRoutes:
                   }
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer ++ portLayer).orDie
+          } yield result).provide(adminLayer ++ contentLayer ++ portLayer).catchAll(_ => ZIO.succeed(Response.internalServerError))
         },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
@@ -198,6 +198,6 @@ object AdminRoutes:
                   ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer).orDie
+          } yield result).provide(adminLayer ++ contentLayer).catchAll(_ => ZIO.succeed(Response.internalServerError))
         }
     )
