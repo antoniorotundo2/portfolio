@@ -47,7 +47,7 @@ object AdminRoutes:
       body = Body.fromString("""{"error":"Not authenticated"}""")
     )
 
-  private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
+  private def checkAuth(adminSvc: AdminService, req: Request): URIO[Any, Boolean] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
 
   private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
@@ -56,7 +56,7 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
-  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Client, Nothing]] =
+  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
       adminSvc   <- ZIO.service[AdminService]
       contentSvc <- ZIO.service[ContentService]
