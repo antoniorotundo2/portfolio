@@ -56,11 +56,20 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
-  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Client, Nothing]] =
+  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
       adminSvc   <- ZIO.service[AdminService]
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
+      client     <- ZIO.service[Client]
+      // Forniamo Client a tutti gli handler
+      adminLayer   = ZLayer.succeed(adminSvc)
+      contentLayer = ZLayer.succeed(contentSvc)
+      portLayer    = ZLayer.succeed(portfolio)
+      clientLayer  = ZLayer.succeed(client)
+      envLayer     = ZLayer.make[AdminService & ContentService & PortfolioService & Client](
+        adminLayer, contentLayer, portLayer, clientLayer
+      )
     yield Routes(
 
       Method.GET / "admin" ->
@@ -74,104 +83,122 @@ object AdminRoutes:
 
       Method.GET / "admin" / "dashboard" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          extractToken(req) match {
-            case None =>
-              ZIO.succeed(Response.redirect(URL.root / "admin"))
-            case Some(token) =>
-              adminSvc.isAuthenticated(token).flatMap {
-                case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
-                case true =>
-                  contentSvc.isWritable.map { writable =>
-                    Response(
-                      status = Status.Ok,
-                      headers = Headers(Header.ContentType(MediaType.text.html)),
-                      body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
-                    )
-                  }
-              }
-          }
+          (for {
+            as <- ZIO.service[AdminService]
+            cs <- ZIO.service[ContentService]
+            result <- extractToken(req) match {
+              case None =>
+                ZIO.succeed(Response.redirect(URL.root / "admin"))
+              case Some(token) =>
+                as.isAuthenticated(token).flatMap {
+                  case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
+                  case true =>
+                    cs.isWritable.map { writable =>
+                      Response(
+                        status = Status.Ok,
+                        headers = Headers(Header.ContentType(MediaType.text.html)),
+                        body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
+                      )
+                    }
+                }
+            }
+          } yield result).provide(adminLayer ++ contentLayer)
         },
 
       Method.POST / "admin" / "api" / "request-otp" ->
         Handler.fromFunctionZIO { (_: Request) =>
-          adminSvc.requestOtp.map {
+          ZIO.serviceWithZIO[AdminService](_.requestOtp).map {
             case Some(_) => Response.json("""{"message":"OTP sent"}""")
             case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
-          }
+          }.provide(adminLayer)
         },
 
       Method.POST / "admin" / "api" / "verify-otp" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          req.body.asString.flatMap { rawBody =>
-            decodeOtpRequest(rawBody) match {
-              case Left(_) =>
-                ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
-              case Right(otpReq) =>
-                adminSvc.verifyOtp(otpReq.otp).flatMap {
-                  case None =>
-                    ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
-                  case Some(token) =>
-                    val cookie = Cookie.Response(
-                      name = "admin_session", content = token,
-                      maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
-                      isHttpOnly = true, sameSite = Some(Cookie.SameSite.Strict),
-                      path = Some(Path.root / "admin")
-                    )
-                    ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
-                }
-            }
-          }.orDie
+          (for {
+            as <- ZIO.service[AdminService]
+            result <- req.body.asString.flatMap { rawBody =>
+              decodeOtpRequest(rawBody) match {
+                case Left(_) =>
+                  ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
+                case Right(otpReq) =>
+                  as.verifyOtp(otpReq.otp).flatMap {
+                    case None =>
+                      ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
+                    case Some(token) =>
+                      val cookie = Cookie.Response(
+                        name = "admin_session", content = token,
+                        maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
+                        isHttpOnly = true, sameSite = Some(Cookie.SameSite.Strict),
+                        path = Some(Path.root / "admin")
+                      )
+                      ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
+                  }
+              }
+            }.orDie
+          } yield result).provide(adminLayer)
         },
 
       Method.POST / "admin" / "api" / "logout" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          extractToken(req) match {
-            case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
-            case Some(token) =>
-              adminSvc.logout(token).as(
-                Response.json("""{"success":true}""").addCookie(
-                  Cookie.Response(name = "admin_session", content = "",
-                    maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))
+          ZIO.serviceWithZIO[AdminService] { as =>
+            extractToken(req) match {
+              case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
+              case Some(token) =>
+                as.logout(token).as(
+                  Response.json("""{"success":true}""").addCookie(
+                    Cookie.Response(name = "admin_session", content = "",
+                      maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))
+                  )
                 )
-              )
-          }
+            }
+          }.provide(adminLayer)
         },
 
       Method.POST / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          checkAuth(adminSvc, req).flatMap {
-            case false => ZIO.succeed(notAuthenticated)
-            case true =>
-              req.body.asString.flatMap { body =>
-                decodeSaveRequest(body) match {
-                  case Left(parseErr) =>
-                    ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
-                  case Right(saveReq) =>
-                    contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                      portfolio.reload.catchAll(_ => ZIO.unit) *>
-                        ZIO.succeed(jsonResponse(SaveResponse(
-                          success = true, message = "File saved to GitHub!",
-                          commitUrl = commit.html_url,
-                          rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-                        )))
-                    }.catchAll { err =>
-                      ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
-                    }
-                }
-              }.orDie
-          }
+          (for {
+            as <- ZIO.service[AdminService]
+            cs <- ZIO.service[ContentService]
+            ps <- ZIO.service[PortfolioService]
+            result <- checkAuth(as, req).flatMap {
+              case false => ZIO.succeed(notAuthenticated)
+              case true =>
+                req.body.asString.flatMap { body =>
+                  decodeSaveRequest(body) match {
+                    case Left(parseErr) =>
+                      ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
+                    case Right(saveReq) =>
+                      cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                        ps.reload.catchAll(_ => ZIO.unit) *>
+                          ZIO.succeed(jsonResponse(SaveResponse(
+                            success = true, message = "File saved to GitHub!",
+                            commitUrl = commit.html_url,
+                            rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                          )))
+                      }.catchAll { err =>
+                        ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
+                      }
+                  }
+                }.orDie
+            }
+          } yield result).provide(adminLayer ++ contentLayer ++ portLayer)
         },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
-          checkAuth(adminSvc, req).flatMap {
-            case false => ZIO.succeed(notAuthenticated)
-            case true =>
-              contentSvc.readFile(s"$section/$filename").flatMap { content =>
-                ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
-              }.catchAll { _ =>
-                ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
-              }
-          }
+          (for {
+            as <- ZIO.service[AdminService]
+            cs <- ZIO.service[ContentService]
+            result <- checkAuth(as, req).flatMap {
+              case false => ZIO.succeed(notAuthenticated)
+              case true =>
+                cs.readFile(s"$section/$filename").flatMap { content =>
+                  ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
+                }.catchAll { _ =>
+                  ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
+                }
+            }
+          } yield result).provide(adminLayer ++ contentLayer)
         }
     )
