@@ -54,6 +54,7 @@ object AdminServiceLive:
         text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
       )
 
+      ZIO.logInfo(s"Calling Resend API for $email") *>
       ZIO.scoped {
         client
           .batched(
@@ -68,13 +69,16 @@ object AdminServiceLive:
             )
           )
           .flatMap { response =>
-            if response.status.isSuccess then ZIO.unit
-            else ZIO.fail(new RuntimeException(s"Resend API error: ${response.status}"))
+            response.body.asString.flatMap { body =>
+              ZIO.logInfo(s"Resend API response: status=${response.status}, body=$body") *>
+              (if response.status.isSuccess then ZIO.unit
+               else ZIO.fail(new RuntimeException(s"Resend error: ${response.status} - $body")))
+            }
           }
       }
         .timeoutFail(new RuntimeException("Resend timeout"))(10.seconds)
         .catchAll { err =>
-          ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")
+          ZIO.logError(s"EMAIL FAILED: ${err.getMessage}") *> ZIO.unit
         }
 
     def requestOtp: Task[Option[String]] =
@@ -83,7 +87,8 @@ object AdminServiceLive:
       val entry = OtpEntry(otp, Instant.now().plusSeconds(AdminConfig.otpExpiryMinutes * 60L))
       for
         _ <- otpStore.update(_.updated(email, entry))
-        _ <- sendOtpEmail(email, otp).fork
+        _ <- ZIO.logInfo(s"Sending email to $email with OTP: $otp")
+        _ <- sendOtpEmail(email, otp)
         _ <- ZIO.logInfo(s"OTP generated for $email: $otp")
       yield Some(otp)
 
