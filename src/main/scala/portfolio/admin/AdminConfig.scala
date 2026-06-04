@@ -14,12 +14,13 @@ object AdminConfig:
   val commitAuthorEmail: String = adminEmail
   val commitMessagePrefix: String = "Admin update:"
 
-  val smtpHost: String = sys.env.getOrElse("SMTP_HOST", "smtp.gmail.com")
+  // SMTP - Resend
+  val smtpHost: String = sys.env.getOrElse("SMTP_HOST", "smtp.resend.com")
   val smtpPort: Int = sys.env.getOrElse("SMTP_PORT", "587").toInt
-  val smtpUser: String = sys.env.getOrElse("SMTP_USER", adminEmail)
+  val smtpUser: String = sys.env.getOrElse("SMTP_USER", "resend")
   val smtpPassword: String =
     sys.env.getOrElse("SMTP_PASSWORD", throw new RuntimeException("SMTP_PASSWORD non impostato"))
-  val smtpFrom: String = sys.env.getOrElse("SMTP_FROM", s"Portfolio Admin <$smtpUser>")
+  val smtpFrom: String = sys.env.getOrElse("SMTP_FROM", "onboarding@resend.dev")
 
   val otpLength: Int = 6
   val otpExpiryMinutes: Int = 5
