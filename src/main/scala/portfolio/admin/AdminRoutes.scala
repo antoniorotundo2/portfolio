@@ -194,7 +194,7 @@ object AdminRoutes:
 
       // GET /admin/api/files/:section/:filename
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
-        Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
+        Handler.fromFunctionZIO[(String, String, Request)] { case (section, filename, req) =>
           checkAuth(deps.adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
