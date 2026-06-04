@@ -47,7 +47,7 @@ object AdminRoutes:
       body = Body.fromString("""{"error":"Not authenticated"}""")
     )
 
-  private def checkAuth(adminSvc: AdminService, req: Request): URIO[Any, Boolean] =
+  private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
 
   private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
@@ -56,11 +56,18 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
+  // Cattura i servizi in un case class per evitare problemi di chiusura
+  private case class Dependencies(
+    adminSvc: AdminService,
+    contentSvc: ContentService,
+    portfolio: PortfolioService
+  )
+
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
-      adminSvc   <- ZIO.service[AdminService]
-      contentSvc <- ZIO.service[ContentService]
-      portfolio  <- ZIO.service[PortfolioService]
+      deps <- ZIO.service[AdminService].zipWith(ZIO.service[ContentService], ZIO.service[PortfolioService])(
+        (a, c, p) => Dependencies(a, c, p)
+      )
     yield Routes(
 
       // GET /admin - pagina di login
@@ -80,10 +87,10 @@ object AdminRoutes:
             case None =>
               ZIO.succeed(Response.redirect(URL.root / "admin"))
             case Some(token) =>
-              adminSvc.isAuthenticated(token).flatMap {
+              deps.adminSvc.isAuthenticated(token).flatMap {
                 case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
                 case true =>
-                  contentSvc.isWritable.map { writable =>
+                  deps.contentSvc.isWritable.map { writable =>
                     Response(
                       status = Status.Ok,
                       headers = Headers(Header.ContentType(MediaType.text.html)),
@@ -97,7 +104,7 @@ object AdminRoutes:
       // POST /admin/api/request-otp
       Method.POST / "admin" / "api" / "request-otp" ->
         Handler.fromFunctionZIO { (_: Request) =>
-          adminSvc.requestOtp.map {
+          deps.adminSvc.requestOtp.map {
             case Some(_) => Response.json("""{"message":"OTP sent"}""")
             case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
           }
@@ -113,7 +120,7 @@ object AdminRoutes:
                   Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest)
                 )
               case Right(otpReq) =>
-                adminSvc.verifyOtp(otpReq.otp).flatMap {
+                deps.adminSvc.verifyOtp(otpReq.otp).flatMap {
                   case None =>
                     ZIO.succeed(
                       Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized)
@@ -140,7 +147,7 @@ object AdminRoutes:
             case None =>
               ZIO.succeed(Response.redirect(URL.root / "admin"))
             case Some(token) =>
-              adminSvc.logout(token).as(
+              deps.adminSvc.logout(token).as(
                 Response.json("""{"success":true}""").addCookie(
                   Cookie.Response(
                     name = "admin_session",
@@ -156,7 +163,7 @@ object AdminRoutes:
       // POST /admin/api/files (salvataggio file)
       Method.POST / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          checkAuth(adminSvc, req).flatMap {
+          checkAuth(deps.adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
               req.body.asString.flatMap { body =>
@@ -166,8 +173,8 @@ object AdminRoutes:
                       Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest)
                     )
                   case Right(saveReq) =>
-                    contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                      portfolio.reload.catchAll(_ => ZIO.unit) *>
+                    deps.contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                      deps.portfolio.reload.catchAll(_ => ZIO.unit) *>
                         ZIO.succeed(jsonResponse(SaveResponse(
                           success = true,
                           message = "File saved to GitHub!",
@@ -188,10 +195,10 @@ object AdminRoutes:
       // GET /admin/api/files/:section/:filename
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
-          checkAuth(adminSvc, req).flatMap {
+          checkAuth(deps.adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
-              contentSvc.readFile(s"$section/$filename").flatMap { content =>
+              deps.contentSvc.readFile(s"$section/$filename").flatMap { content =>
                 ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
               }.catchAll { _ =>
                 ZIO.succeed(
