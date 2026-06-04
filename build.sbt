@@ -3,8 +3,8 @@ val zioHttpVersion   = "3.11.2"
 val zioJsonVersion   = "0.7.3"
 val scalatagsVersion = "0.13.1"
 
-// Scala 3.7.x per fix definitivo del warning sun.misc.Unsafe
-ThisBuild / scalaVersion := "3.7.4"
+// Scala 3.8.x per fix definitivo del warning sun.misc.Unsafe
+ThisBuild / scalaVersion := "3.8.3"
 ThisBuild / organization := "dev.portfolio"
 
 // Allow sbt to evict zio-json to the version required by zio-http transitives
