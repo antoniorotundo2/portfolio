@@ -82,7 +82,7 @@ object AdminServiceLive:
       val entry = OtpEntry(otp, Instant.now().plusSeconds(AdminConfig.otpExpiryMinutes * 60L))
       for
         _ <- otpStore.update(_.updated(email, entry))
-        _ <- sendOtpEmail(email, otp).fork
+        _ <- sendOtpEmail(email, otp)
         _ <- ZIO.logInfo(s"OTP generated for $email: $otp")
       yield Some(otp)
 
