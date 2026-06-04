@@ -61,15 +61,9 @@ object AdminRoutes:
       adminSvc   <- ZIO.service[AdminService]
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
-      client     <- ZIO.service[Client]
-      // Forniamo Client a tutti gli handler
       adminLayer   = ZLayer.succeed(adminSvc)
       contentLayer = ZLayer.succeed(contentSvc)
       portLayer    = ZLayer.succeed(portfolio)
-      clientLayer  = ZLayer.succeed(client)
-      envLayer     = ZLayer.make[AdminService & ContentService & PortfolioService & Client](
-        adminLayer, contentLayer, portLayer, clientLayer
-      )
     yield Routes(
 
       Method.GET / "admin" ->
@@ -87,8 +81,7 @@ object AdminRoutes:
             as <- ZIO.service[AdminService]
             cs <- ZIO.service[ContentService]
             result <- extractToken(req) match {
-              case None =>
-                ZIO.succeed(Response.redirect(URL.root / "admin"))
+              case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
               case Some(token) =>
                 as.isAuthenticated(token).flatMap {
                   case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
@@ -115,9 +108,8 @@ object AdminRoutes:
 
       Method.POST / "admin" / "api" / "verify-otp" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          (for {
-            as <- ZIO.service[AdminService]
-            result <- req.body.asString.flatMap { rawBody =>
+          ZIO.serviceWithZIO[AdminService] { as =>
+            req.body.asString.flatMap { rawBody =>
               decodeOtpRequest(rawBody) match {
                 case Left(_) =>
                   ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
@@ -136,7 +128,7 @@ object AdminRoutes:
                   }
               }
             }.orDie
-          } yield result).provide(adminLayer)
+          }.provide(adminLayer)
         },
 
       Method.POST / "admin" / "api" / "logout" ->
@@ -185,11 +177,16 @@ object AdminRoutes:
           } yield result).provide(adminLayer ++ contentLayer ++ portLayer)
         },
 
+      // GET /admin/api/files/:section/:filename - estraggo section e filename dal path manualmente
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
-        Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
+        Handler.fromFunctionZIO { (req: Request) =>
           (for {
             as <- ZIO.service[AdminService]
             cs <- ZIO.service[ContentService]
+            // Estrai section e filename dal path
+            pathParts = req.path.encode.split("/").drop(4) // /admin/api/files/section/filename
+            section   = if pathParts.length >= 1 then pathParts(0) else ""
+            filename  = if pathParts.length >= 2 then pathParts(1) else ""
             result <- checkAuth(as, req).flatMap {
               case false => ZIO.succeed(notAuthenticated)
               case true =>
