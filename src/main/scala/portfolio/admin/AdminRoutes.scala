@@ -56,7 +56,6 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
-  // Cattura i servizi in un case class per evitare problemi di chiusura
   private case class Dependencies(
     adminSvc: AdminService,
     contentSvc: ContentService,
@@ -65,9 +64,10 @@ object AdminRoutes:
 
   val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
     for
-      deps <- ZIO.service[AdminService].zipWith(ZIO.service[ContentService], ZIO.service[PortfolioService])(
-        (a, c, p) => Dependencies(a, c, p)
-      )
+      deps <- ZIO.service[AdminService]
+        .zip(ZIO.service[ContentService])
+        .zip(ZIO.service[PortfolioService])
+        .map { case ((a, c), p) => Dependencies(a, c, p) }
     yield Routes(
 
       // GET /admin - pagina di login
