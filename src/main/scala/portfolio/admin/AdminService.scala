@@ -1,6 +1,8 @@
 package portfolio.admin
 
 import zio.*
+import zio.http.*
+import zio.json.*
 import java.security.SecureRandom
 import java.time.Instant
 
@@ -11,20 +13,26 @@ trait AdminService:
   def logout(token: String): UIO[Unit]
 
 object AdminServiceLive:
-  val layer: ZLayer[Any, Nothing, AdminService] =
+  val layer: ZLayer[Client, Nothing, AdminService] =
     ZLayer.fromZIO {
       for
         otpStore     <- Ref.make(Map.empty[String, OtpEntry])
         sessionStore <- Ref.make(Map.empty[String, AdminSession])
-      yield Live(otpStore, sessionStore)
+        client       <- ZIO.service[Client]
+      yield Live(otpStore, sessionStore, client)
     }
 
   case class OtpEntry(code: String, expiresAt: Instant)
   case class AdminSession(expiresAt: Instant)
 
+  private case class ResendRequest(from: String, to: String, subject: String, text: String)
+  private object ResendRequest:
+    given JsonEncoder[ResendRequest] = DeriveJsonEncoder.gen[ResendRequest]
+
   private final class Live(
     otpStore: Ref[Map[String, OtpEntry]],
-    sessionStore: Ref[Map[String, AdminSession]]
+    sessionStore: Ref[Map[String, AdminSession]],
+    client: Client
   ) extends AdminService:
 
     private val random = new SecureRandom()
@@ -39,34 +47,35 @@ object AdminServiceLive:
       bytes.map("%02x".format(_)).mkString
 
     private def sendOtpEmail(email: String, otp: String): Task[Unit] =
-      ZIO.attemptBlocking {
-        import java.util.Properties
-        import jakarta.mail.*
-        import jakarta.mail.internet.*
+      val requestBody = ResendRequest(
+        from = AdminConfig.smtpFrom,
+        to = email,
+        subject = "Admin Code — Portfolio",
+        text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
+      )
 
-        val props = new Properties()
-        props.put("mail.smtp.auth", "true")
-        props.put("mail.smtp.starttls.enable", "true")
-        props.put("mail.smtp.host", AdminConfig.smtpHost)
-        props.put("mail.smtp.port", AdminConfig.smtpPort.toString)
-        props.put("mail.smtp.connectiontimeout", "5000")
-        props.put("mail.smtp.timeout", "5000")
-        props.put("mail.smtp.writetimeout", "5000")
-
-        val mailSession = jakarta.mail.Session.getInstance(props, new Authenticator:
-          override def getPasswordAuthentication =
-            new PasswordAuthentication(AdminConfig.smtpUser, AdminConfig.smtpPassword)
-        )
-
-        val message = new MimeMessage(mailSession)
-        message.setFrom(new InternetAddress(AdminConfig.smtpFrom))
-        message.setRecipients(Message.RecipientType.TO, email)
-        message.setSubject("Admin Code — Portfolio")
-        message.setText(s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes.", "UTF-8")
-        Transport.send(message)
-      }.catchAll { err =>
-        ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")
+      ZIO.scoped {
+        client
+          .batched(
+            Request(
+              method = Method.POST,
+              url = URL.decode("https://api.resend.com/emails").toOption.get,
+              headers = Headers(
+                Header.Custom("Authorization", s"Bearer ${AdminConfig.smtpPassword}"),
+                Header.ContentType(MediaType.application.json)
+              ),
+              body = Body.fromString(requestBody.toJson)
+            )
+          )
+          .flatMap { response =>
+            if response.status.isSuccess then ZIO.unit
+            else ZIO.fail(new RuntimeException(s"Resend API error: ${response.status}"))
+          }
       }
+        .timeoutFail(new RuntimeException("Resend timeout"))(10.seconds)
+        .catchAll { err =>
+          ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")
+        }
 
     def requestOtp: Task[Option[String]] =
       val email = AdminConfig.adminEmail

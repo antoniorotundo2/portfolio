@@ -1,118 +1,197 @@
 package portfolio.admin
 
+import portfolio.services.PortfolioService
 import zio.*
 import zio.http.*
 import zio.json.*
-import java.security.SecureRandom
-import java.time.Instant
 
-trait AdminService:
-  def requestOtp: Task[Option[String]]
-  def verifyOtp(code: String): Task[Option[String]]
-  def isAuthenticated(token: String): UIO[Boolean]
-  def logout(token: String): UIO[Unit]
+// --- Modelli di dati ---
+case class OtpRequest(otp: String)
+case class SaveFileRequest(path: String, content: String)
+case class FileInfo(path: String, displayName: String, section: String)
+case class FilesListResponse(files: List[FileInfo], writable: Boolean, isGitHubMode: Boolean)
+case class FileContentResponse(path: String, content: String)
+case class SaveResponse(success: Boolean, message: String, commitUrl: String, rebuildNote: String)
 
-object AdminServiceLive:
-  val layer: ZLayer[Client, Nothing, AdminService] =
-    ZLayer.fromZIO {
-      for
-        otpStore     <- Ref.make(Map.empty[String, OtpEntry])
-        sessionStore <- Ref.make(Map.empty[String, AdminSession])
-        client       <- ZIO.service[Client]
-      yield Live(otpStore, sessionStore, client)
-    }
+// --- Codec JSON ---
+object OtpRequest:
+  given JsonDecoder[OtpRequest] = DeriveJsonDecoder.gen[OtpRequest]
 
-  case class OtpEntry(code: String, expiresAt: Instant)
-  case class AdminSession(expiresAt: Instant)
+object SaveFileRequest:
+  given JsonDecoder[SaveFileRequest] = DeriveJsonDecoder.gen[SaveFileRequest]
 
-  private case class ResendRequest(from: String, to: String, subject: String, text: String)
-  private object ResendRequest:
-    given JsonEncoder[ResendRequest] = DeriveJsonEncoder.gen[ResendRequest]
+object FileInfo:
+  given JsonEncoder[FileInfo] = DeriveJsonEncoder.gen[FileInfo]
 
-  private final class Live(
-    otpStore: Ref[Map[String, OtpEntry]],
-    sessionStore: Ref[Map[String, AdminSession]],
-    client: Client
-  ) extends AdminService:
+object FilesListResponse:
+  given JsonEncoder[FilesListResponse] = DeriveJsonEncoder.gen[FilesListResponse]
 
-    private val random = new SecureRandom()
+object FileContentResponse:
+  given JsonEncoder[FileContentResponse] = DeriveJsonEncoder.gen[FileContentResponse]
 
-    private def generateOtp(): String =
-      val bound = math.pow(10, AdminConfig.otpLength).toInt
-      (random.nextInt(bound) + bound).toString.take(AdminConfig.otpLength)
+object SaveResponse:
+  given JsonEncoder[SaveResponse] = DeriveJsonEncoder.gen[SaveResponse]
 
-    private def generateToken(): String =
-      val bytes = new Array[Byte](32)
-      random.nextBytes(bytes)
-      bytes.map("%02x".format(_)).mkString
+// --- Routes ---
+object AdminRoutes:
 
-    private def sendOtpEmail(email: String, otp: String): Task[Unit] =
-      val requestBody = ResendRequest(
-        from = AdminConfig.smtpFrom,
-        to = email,
-        subject = "Admin Code — Portfolio",
-        text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
-      )
+  private def extractToken(req: Request): Option[String] =
+    req.cookies.find(_.name == "admin_session").map(_.content)
 
-      ZIO.scoped {
-        client
-          .batched(
-            Request(
-              method = Method.POST,
-              url = URL.decode("https://api.resend.com/emails").toOption.get,
-              headers = Headers(
-                Header.Custom("Authorization", s"Bearer ${AdminConfig.smtpPassword}"),
-                Header.ContentType(MediaType.application.json)
-              ),
-              body = Body.fromString(requestBody.toJson)
-            )
-          )
-          .flatMap { response =>
-            if response.status.isSuccess then ZIO.unit
-            else ZIO.fail(new RuntimeException(s"Resend API error: ${response.status}"))
-          }
-      }
-        .timeoutFail(new RuntimeException("Resend timeout"))(10.seconds)
-        .catchAll { err =>
-          ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp")
+  private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
+    Response.json(encoder.encodeJson(value, None).toString)
+
+  private val notAuthenticated: Response =
+    Response(
+      status = Status.Unauthorized,
+      body = Body.fromString("""{"error":"Not authenticated"}""")
+    )
+
+  private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
+    adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
+
+  private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
+    summon[JsonDecoder[SaveFileRequest]].decodeJson(body)
+
+  private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
+    summon[JsonDecoder[OtpRequest]].decodeJson(body)
+
+  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Client, Nothing]] =
+    for
+      adminSvc   <- ZIO.service[AdminService]
+      contentSvc <- ZIO.service[ContentService]
+      portfolio  <- ZIO.service[PortfolioService]
+    yield Routes(
+
+      // GET /admin - pagina di login
+      Method.GET / "admin" -> Handler.fromFunctionZIO[Request] { _ =>
+        ZIO.succeed(Response(
+          status = Status.Ok,
+          headers = Headers(Header.ContentType(MediaType.text.html)),
+          body = Body.fromString(AdminViews.loginPage)
+        ))
+      },
+
+      // GET /admin/dashboard
+      Method.GET / "admin" / "dashboard" -> Handler.fromFunctionZIO[Request] { req =>
+        extractToken(req) match {
+          case None =>
+            ZIO.succeed(Response.redirect(URL.root / "admin"))
+          case Some(token) =>
+            adminSvc.isAuthenticated(token).flatMap {
+              case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
+              case true =>
+                contentSvc.isWritable.map { writable =>
+                  Response(
+                    status = Status.Ok,
+                    headers = Headers(Header.ContentType(MediaType.text.html)),
+                    body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
+                  )
+                }
+            }
         }
+      },
 
-    def requestOtp: Task[Option[String]] =
-      val email = AdminConfig.adminEmail
-      val otp = generateOtp()
-      val entry = OtpEntry(otp, Instant.now().plusSeconds(AdminConfig.otpExpiryMinutes * 60L))
-      for
-        _ <- otpStore.update(_.updated(email, entry))
-        _ <- sendOtpEmail(email, otp).fork
-        _ <- ZIO.logInfo(s"OTP generated for $email: $otp")
-      yield Some(otp)
+      // POST /admin/api/request-otp
+      Method.POST / "admin" / "api" / "request-otp" -> Handler.fromFunctionZIO[Request] { _ =>
+        adminSvc.requestOtp.map {
+          case Some(_) => Response.json("""{"message":"OTP sent"}""")
+          case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
+        }
+      },
 
-    def verifyOtp(code: String): Task[Option[String]] =
-      val email = AdminConfig.adminEmail
-      for
-        store <- otpStore.get
-        result <- store.get(email) match
-          case None => ZIO.logWarning("No OTP requested").as(None)
-          case Some(entry) if Instant.now().isAfter(entry.expiresAt) =>
-            otpStore.update(_ - email) *> ZIO.logWarning("OTP expired").as(None)
-          case Some(entry) if entry.code != code =>
-            ZIO.logWarning("Invalid OTP").as(None)
-          case Some(_) =>
-            val token = generateToken()
-            val session = AdminSession(Instant.now().plusSeconds(AdminConfig.sessionExpiryHours * 3600L))
-            for
-              _ <- otpStore.update(_ - email)
-              _ <- sessionStore.update(_.updated(token, session))
-            yield Some(token)
-      yield result
+      // POST /admin/api/verify-otp
+      Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
+        req.body.asString.flatMap { rawBody =>
+          decodeOtpRequest(rawBody) match {
+            case Left(_) =>
+              ZIO.succeed(
+                Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest)
+              )
+            case Right(otpReq) =>
+              adminSvc.verifyOtp(otpReq.otp).flatMap {
+                case None =>
+                  ZIO.succeed(
+                    Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized)
+                  )
+                case Some(token) =>
+                  val cookie = Cookie.Response(
+                    name = "admin_session",
+                    content = token,
+                    maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
+                    isHttpOnly = true,
+                    sameSite = Some(Cookie.SameSite.Strict),
+                    path = Some(Path.root / "admin")
+                  )
+                  ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
+              }
+          }
+        }.orDie
+      },
 
-    def isAuthenticated(token: String): UIO[Boolean] =
-      for
-        store <- sessionStore.get
-        valid <- store.get(token) match
-          case Some(sess) if Instant.now().isBefore(sess.expiresAt) => ZIO.succeed(true)
-          case Some(_) => sessionStore.update(_ - token).as(false)
-          case None => ZIO.succeed(false)
-      yield valid
+      // POST /admin/api/logout
+      Method.POST / "admin" / "api" / "logout" -> Handler.fromFunctionZIO[Request] { req =>
+        extractToken(req) match {
+          case None =>
+            ZIO.succeed(Response.redirect(URL.root / "admin"))
+          case Some(token) =>
+            adminSvc.logout(token).as(
+              Response.json("""{"success":true}""").addCookie(
+                Cookie.Response(
+                  name = "admin_session",
+                  content = "",
+                  maxAge = Some(java.time.Duration.ZERO),
+                  path = Some(Path.root / "admin")
+                )
+              )
+            )
+        }
+      },
 
-    def logout(token: String): UIO[Unit] = sessionStore.update(_ - token)
+      // POST /admin/api/files (salvataggio file)
+      Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
+        checkAuth(adminSvc, req).flatMap {
+          case false => ZIO.succeed(notAuthenticated)
+          case true =>
+            req.body.asString.flatMap { body =>
+              decodeSaveRequest(body) match {
+                case Left(parseErr) =>
+                  ZIO.succeed(
+                    Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest)
+                  )
+                case Right(saveReq) =>
+                  contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                    portfolio.reload.catchAll(_ => ZIO.unit) *>
+                      ZIO.succeed(jsonResponse(SaveResponse(
+                        success = true,
+                        message = "File saved to GitHub!",
+                        commitUrl = commit.html_url,
+                        rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                      )))
+                  }.catchAll { err =>
+                    ZIO.succeed(
+                      Response.json(s"""{"error":"Save error: ${err.getMessage}"}""")
+                        .status(Status.InternalServerError)
+                    )
+                  }
+              }
+            }.orDie
+        }
+      },
+
+      // GET /admin/api/files/:section/:filename
+      Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
+        Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
+          checkAuth(adminSvc, req).flatMap {
+            case false => ZIO.succeed(notAuthenticated)
+            case true =>
+              contentSvc.readFile(s"$section/$filename").flatMap { content =>
+                ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
+              }.catchAll { _ =>
+                ZIO.succeed(
+                  Response.json(s"""{"error":"Not found"}""").status(Status.NotFound)
+                )
+              }
+          }
+        }
+    )
