@@ -45,7 +45,7 @@ object AdminServiceLive:
     private def sendOtpEmail(email: String, otp: String): Task[Unit] =
       ZIO.attemptBlocking {
         val json = s"""{"from":"${AdminConfig.smtpFrom}","to":"$email","subject":"Admin Code — Portfolio","text":"Your code is: $otp\\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."}"""
-        val url = java.net.URI("https://api.eu.resend.com/emails").toURL
+        val url = java.net.URI("https://api.resend.com/emails").toURL
         val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
         conn.setRequestMethod("POST")
         conn.setRequestProperty("Authorization", s"Bearer ${AdminConfig.smtpPassword}")
