@@ -95,21 +95,25 @@ object AdminRoutes:
                     }
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer)
+          } yield result).provide(adminLayer ++ contentLayer).orDie
         },
 
       Method.POST / "admin" / "api" / "request-otp" ->
         Handler.fromFunctionZIO { (_: Request) =>
-          ZIO.serviceWithZIO[AdminService](_.requestOtp).map {
-            case Some(_) => Response.json("""{"message":"OTP sent"}""")
-            case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
-          }.provide(adminLayer)
+          ZIO.serviceWithZIO[AdminService](_.requestOtp)
+            .map {
+              case Some(_) => Response.json("""{"message":"OTP sent"}""")
+              case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
+            }
+            .provide(adminLayer)
+            .orDie
         },
 
       Method.POST / "admin" / "api" / "verify-otp" ->
         Handler.fromFunctionZIO { (req: Request) =>
-          ZIO.serviceWithZIO[AdminService] { as =>
-            req.body.asString.flatMap { rawBody =>
+          (for {
+            as <- ZIO.service[AdminService]
+            result <- req.body.asString.flatMap { rawBody =>
               decodeOtpRequest(rawBody) match {
                 case Left(_) =>
                   ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
@@ -127,8 +131,8 @@ object AdminRoutes:
                       ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
                   }
               }
-            }.orDie
-          }.provide(adminLayer)
+            }
+          } yield result).provide(adminLayer).orDie
         },
 
       Method.POST / "admin" / "api" / "logout" ->
@@ -144,7 +148,7 @@ object AdminRoutes:
                   )
                 )
             }
-          }.provide(adminLayer)
+          }.provide(adminLayer).orDie
         },
 
       Method.POST / "admin" / "api" / "files" ->
@@ -172,19 +176,17 @@ object AdminRoutes:
                         ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError))
                       }
                   }
-                }.orDie
+                }
             }
-          } yield result).provide(adminLayer ++ contentLayer ++ portLayer)
+          } yield result).provide(adminLayer ++ contentLayer ++ portLayer).orDie
         },
 
-      // GET /admin/api/files/:section/:filename - estraggo section e filename dal path manualmente
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
         Handler.fromFunctionZIO { (req: Request) =>
           (for {
             as <- ZIO.service[AdminService]
             cs <- ZIO.service[ContentService]
-            // Estrai section e filename dal path
-            pathParts = req.path.encode.split("/").drop(4) // /admin/api/files/section/filename
+            pathParts = req.path.encode.split("/").drop(4)
             section   = if pathParts.length >= 1 then pathParts(0) else ""
             filename  = if pathParts.length >= 2 then pathParts(1) else ""
             result <- checkAuth(as, req).flatMap {
@@ -196,6 +198,6 @@ object AdminRoutes:
                   ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer)
+          } yield result).provide(adminLayer ++ contentLayer).orDie
         }
     )
