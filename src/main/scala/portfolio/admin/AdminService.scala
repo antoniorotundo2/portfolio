@@ -25,6 +25,10 @@ object AdminServiceLive:
   case class OtpEntry(code: String, expiresAt: Instant)
   case class AdminSession(expiresAt: Instant)
 
+  private case class ResendRequest(from: String, to: String, subject: String, text: String)
+  private object ResendRequest:
+    given JsonEncoder[ResendRequest] = DeriveJsonEncoder.gen[ResendRequest]
+
   private final class Live(
     otpStore: Ref[Map[String, OtpEntry]],
     sessionStore: Ref[Map[String, AdminSession]],
@@ -43,26 +47,33 @@ object AdminServiceLive:
       bytes.map("%02x".format(_)).mkString
 
     private def sendOtpEmail(email: String, otp: String): Task[Unit] =
-      ZIO.attemptBlocking {
-        val json = s"""{"from":"${AdminConfig.smtpFrom}","to":"$email","subject":"Admin Code — Portfolio","text":"Your code is: $otp\\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."}"""
-        val url = java.net.URI("https://api.resend.com/emails").toURL
-        val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
-        conn.setRequestMethod("POST")
-        conn.setRequestProperty("Authorization", s"Bearer ${AdminConfig.smtpPassword}")
-        conn.setRequestProperty("Content-Type", "application/json")
-        conn.setRequestProperty("Connection", "keep-alive")
-        conn.setDoOutput(true)
-        conn.setConnectTimeout(5000)
-        conn.setReadTimeout(5000)
-        conn.getOutputStream.write(json.getBytes("UTF-8"))
-        val responseCode = conn.getResponseCode
-        val stream = if (responseCode >= 200 && responseCode < 300) conn.getInputStream else conn.getErrorStream
-        val responseBody = scala.io.Source.fromInputStream(stream).mkString
-        stream.close()
-        conn.disconnect()
-        if (responseCode != 200) throw new RuntimeException(s"Resend error: $responseCode - $responseBody")
+      val requestBody = ResendRequest(
+        from = AdminConfig.smtpFrom,
+        to = email,
+        subject = "Admin Code — Portfolio",
+        text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
+      )
+
+      ZIO.scoped {
+        client
+          .batched(
+            Request(
+              method = Method.POST,
+              url = URL.decode("https://api.resend.com/emails").toOption.get,
+              headers = Headers(
+                Header.Custom("Authorization", s"Bearer ${AdminConfig.smtpPassword}"),
+                Header.ContentType(MediaType.application.json)
+              ),
+              body = Body.fromString(requestBody.toJson)
+            )
+          )
+          .flatMap { response =>
+            if response.status.isSuccess then ZIO.unit
+            else response.body.asString.flatMap(body =>
+              ZIO.fail(new RuntimeException(s"Resend error: ${response.status} - $body")))
+          }
       }
-        .timeoutFail(new RuntimeException("Resend timeout"))(8.seconds)
+        .timeoutFail(new RuntimeException("Resend timeout"))(30.seconds)
         .catchAll(err => ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp"))
 
     def requestOtp: Task[Option[String]] =
