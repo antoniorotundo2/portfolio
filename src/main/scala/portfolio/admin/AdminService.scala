@@ -25,8 +25,6 @@ object AdminServiceLive:
   case class OtpEntry(code: String, expiresAt: Instant)
   case class AdminSession(expiresAt: Instant)
 
-  private case class ResendRequest(from: String, to: String, subject: String, text: String)
-
   private final class Live(
     otpStore: Ref[Map[String, OtpEntry]],
     sessionStore: Ref[Map[String, AdminSession]],
@@ -47,22 +45,24 @@ object AdminServiceLive:
     private def sendOtpEmail(email: String, otp: String): Task[Unit] =
       ZIO.attemptBlocking {
         val json = s"""{"from":"${AdminConfig.smtpFrom}","to":"$email","subject":"Admin Code — Portfolio","text":"Your code is: $otp\\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."}"""
-        val url = java.net.URI("https://api.resend.com/emails").toURL
+        val url = java.net.URI("https://api.eu.resend.com/emails").toURL
         val conn = url.openConnection().asInstanceOf[java.net.HttpURLConnection]
         conn.setRequestMethod("POST")
         conn.setRequestProperty("Authorization", s"Bearer ${AdminConfig.smtpPassword}")
         conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Connection", "keep-alive")
         conn.setDoOutput(true)
-        conn.setConnectTimeout(15000)
-        conn.setReadTimeout(15000)
+        conn.setConnectTimeout(5000)
+        conn.setReadTimeout(5000)
         conn.getOutputStream.write(json.getBytes("UTF-8"))
         val responseCode = conn.getResponseCode
         val stream = if (responseCode >= 200 && responseCode < 300) conn.getInputStream else conn.getErrorStream
         val responseBody = scala.io.Source.fromInputStream(stream).mkString
         stream.close()
+        conn.disconnect()
         if (responseCode != 200) throw new RuntimeException(s"Resend error: $responseCode - $responseBody")
       }
-        .timeoutFail(new RuntimeException("Resend timeout"))(20.seconds)
+        .timeoutFail(new RuntimeException("Resend timeout"))(8.seconds)
         .catchAll(err => ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp"))
 
     def requestOtp: Task[Option[String]] =
