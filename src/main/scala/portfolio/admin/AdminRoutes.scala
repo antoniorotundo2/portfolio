@@ -61,9 +61,11 @@ object AdminRoutes:
       adminSvc   <- ZIO.service[AdminService]
       contentSvc <- ZIO.service[ContentService]
       portfolio  <- ZIO.service[PortfolioService]
+      client     <- ZIO.service[Client]
       adminLayer   = ZLayer.succeed(adminSvc)
       contentLayer = ZLayer.succeed(contentSvc)
       portLayer    = ZLayer.succeed(portfolio)
+      clientLayer  = ZLayer.succeed(client)
     yield Routes(
 
       Method.GET / "admin" ->
@@ -177,7 +179,7 @@ object AdminRoutes:
                   }
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer ++ portLayer)
+          } yield result).provide(adminLayer ++ contentLayer ++ portLayer ++ clientLayer)
         },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
@@ -197,6 +199,6 @@ object AdminRoutes:
                   ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound))
                 }
             }
-          } yield result).provide(adminLayer ++ contentLayer)
+          } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
         }
     )
