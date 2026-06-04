@@ -76,9 +76,9 @@ object AdminServiceLive:
             }
           }
       }
-        .timeoutFail(new RuntimeException("Resend timeout"))(10.seconds)
+        .timeoutFail(new RuntimeException("Resend timeout"))(30.seconds)
         .catchAll { err =>
-          ZIO.logError(s"EMAIL FAILED: ${err.getMessage}") *> ZIO.unit
+          ZIO.logError(s"EMAIL FAILED: ${err.getMessage}. Class: ${err.getClass.getName}") *> ZIO.unit
         }
 
     def requestOtp: Task[Option[String]] =
