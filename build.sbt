@@ -4,7 +4,7 @@ val zioJsonVersion   = "0.7.3"
 val scalatagsVersion = "0.13.1"
 
 // Scala 3.3.x LTS release
-ThisBuild / scalaVersion := "3.3.8-RC2"
+ThisBuild / scalaVersion := "3.3.7"
 ThisBuild / organization := "dev.portfolio"
 
 // Allow sbt to evict zio-json to the version required by zio-http transitives
