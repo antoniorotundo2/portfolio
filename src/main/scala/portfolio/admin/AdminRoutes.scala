@@ -64,7 +64,7 @@ object AdminRoutes:
     yield Routes(
 
       Method.GET / "admin" ->
-        Handler.fromFunction[Request] { _ =>
+        Handler.fromFunction { (_: Request) =>
           Response(
             status = Status.Ok,
             headers = Headers(Header.ContentType(MediaType.text.html)),
@@ -73,7 +73,7 @@ object AdminRoutes:
         },
 
       Method.GET / "admin" / "dashboard" ->
-        Handler.fromFunctionZIO[Request] { req =>
+        Handler.fromFunctionZIO { (req: Request) =>
           extractToken(req) match {
             case None =>
               ZIO.succeed(Response.redirect(URL.root / "admin"))
@@ -93,7 +93,7 @@ object AdminRoutes:
         },
 
       Method.POST / "admin" / "api" / "request-otp" ->
-        Handler.fromFunctionZIO[Request] { _ =>
+        Handler.fromFunctionZIO { (_: Request) =>
           adminSvc.requestOtp.map {
             case Some(_) => Response.json("""{"message":"OTP sent"}""")
             case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
@@ -101,7 +101,7 @@ object AdminRoutes:
         },
 
       Method.POST / "admin" / "api" / "verify-otp" ->
-        Handler.fromFunctionZIO[Request] { req =>
+        Handler.fromFunctionZIO { (req: Request) =>
           req.body.asString.flatMap { rawBody =>
             decodeOtpRequest(rawBody) match {
               case Left(_) =>
@@ -124,7 +124,7 @@ object AdminRoutes:
         },
 
       Method.POST / "admin" / "api" / "logout" ->
-        Handler.fromFunctionZIO[Request] { req =>
+        Handler.fromFunctionZIO { (req: Request) =>
           extractToken(req) match {
             case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
             case Some(token) =>
@@ -138,7 +138,7 @@ object AdminRoutes:
         },
 
       Method.POST / "admin" / "api" / "files" ->
-        Handler.fromFunctionZIO[Request] { req =>
+        Handler.fromFunctionZIO { (req: Request) =>
           checkAuth(adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
@@ -163,7 +163,7 @@ object AdminRoutes:
         },
 
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
-        Handler.fromFunctionZIO[(String, String, Request)] { case (section, filename, req) =>
+        Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
           checkAuth(adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
