@@ -3,8 +3,8 @@ val zioHttpVersion   = "3.11.2"
 val zioJsonVersion   = "0.7.3"
 val scalatagsVersion = "0.13.1"
 
-// Scala 3.5.x release (fix deprecated sun.misc.Unsafe::objectFieldOffset API warning)
-ThisBuild / scalaVersion := "3.5.2"
+// Scala 3.6.x per fix definitivo del warning sun.misc.Unsafe
+ThisBuild / scalaVersion := "3.6.4"
 ThisBuild / organization := "dev.portfolio"
 
 // Allow sbt to evict zio-json to the version required by zio-http transitives

@@ -27,6 +27,7 @@ WORKDIR /app
 COPY --from=builder /build/target/scala-*/portfolio-assembly-*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", \
+  "--enable-native-access=ALL-UNNAMED", \
   "-XX:+UseContainerSupport", \
   "-XX:MaxRAMPercentage=75.0", \
   "-jar", "app.jar"]
