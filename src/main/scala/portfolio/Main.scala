@@ -20,7 +20,7 @@ object Main extends ZIOAppDefault:
     } yield ()).provide(
       Server.defaultWithPort(8080),
       PortfolioServiceLive.layer,
-      ZClient.default,                // invece di Client.live
+      ZClient.default,
       AdminServiceLive.layer,
       GitHubServiceLive.layer,
       ContentServiceLive.layer

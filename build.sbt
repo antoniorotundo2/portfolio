@@ -40,9 +40,6 @@ lazy val root = (project in file("."))
       "dev.zio" %% "zio-logging"              % "2.5.3",
       "dev.zio" %% "zio-logging-slf4j-bridge" % "2.5.3",
       "ch.qos.logback" % "logback-classic"    % "1.5.34",
-
-      // Email sending (Jakarta Mail / Angus Mail for OTP)
-      "org.eclipse.angus" % "angus-mail" % "2.1.0-M1",
     ),
     scalacOptions ++= Seq(
       "-deprecation",
