@@ -64,124 +64,130 @@ object AdminRoutes:
     yield Routes(
 
       // GET /admin - pagina di login
-      Method.GET / "admin" -> Handler.fromFunctionZIO[Request] { _ =>
-        ZIO.succeed(Response(
-          status = Status.Ok,
-          headers = Headers(Header.ContentType(MediaType.text.html)),
-          body = Body.fromString(AdminViews.loginPage)
-        ))
-      },
+      Method.GET / "admin" ->
+        Handler.fromFunction { (_: Request) =>
+          Response(
+            status = Status.Ok,
+            headers = Headers(Header.ContentType(MediaType.text.html)),
+            body = Body.fromString(AdminViews.loginPage)
+          )
+        },
 
       // GET /admin/dashboard
-      Method.GET / "admin" / "dashboard" -> Handler.fromFunctionZIO[Request] { req =>
-        extractToken(req) match {
-          case None =>
-            ZIO.succeed(Response.redirect(URL.root / "admin"))
-          case Some(token) =>
-            adminSvc.isAuthenticated(token).flatMap {
-              case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
-              case true =>
-                contentSvc.isWritable.map { writable =>
-                  Response(
-                    status = Status.Ok,
-                    headers = Headers(Header.ContentType(MediaType.text.html)),
-                    body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
-                  )
-                }
-            }
-        }
-      },
-
-      // POST /admin/api/request-otp
-      Method.POST / "admin" / "api" / "request-otp" -> Handler.fromFunctionZIO[Request] { _ =>
-        adminSvc.requestOtp.map {
-          case Some(_) => Response.json("""{"message":"OTP sent"}""")
-          case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
-        }
-      },
-
-      // POST /admin/api/verify-otp
-      Method.POST / "admin" / "api" / "verify-otp" -> Handler.fromFunctionZIO[Request] { req =>
-        req.body.asString.flatMap { rawBody =>
-          decodeOtpRequest(rawBody) match {
-            case Left(_) =>
-              ZIO.succeed(
-                Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest)
-              )
-            case Right(otpReq) =>
-              adminSvc.verifyOtp(otpReq.otp).flatMap {
-                case None =>
-                  ZIO.succeed(
-                    Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized)
-                  )
-                case Some(token) =>
-                  val cookie = Cookie.Response(
-                    name = "admin_session",
-                    content = token,
-                    maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
-                    isHttpOnly = true,
-                    sameSite = Some(Cookie.SameSite.Strict),
-                    path = Some(Path.root / "admin")
-                  )
-                  ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
-              }
-          }
-        }.orDie
-      },
-
-      // POST /admin/api/logout
-      Method.POST / "admin" / "api" / "logout" -> Handler.fromFunctionZIO[Request] { req =>
-        extractToken(req) match {
-          case None =>
-            ZIO.succeed(Response.redirect(URL.root / "admin"))
-          case Some(token) =>
-            adminSvc.logout(token).as(
-              Response.json("""{"success":true}""").addCookie(
-                Cookie.Response(
-                  name = "admin_session",
-                  content = "",
-                  maxAge = Some(java.time.Duration.ZERO),
-                  path = Some(Path.root / "admin")
-                )
-              )
-            )
-        }
-      },
-
-      // POST /admin/api/files (salvataggio file)
-      Method.POST / "admin" / "api" / "files" -> Handler.fromFunctionZIO[Request] { req =>
-        checkAuth(adminSvc, req).flatMap {
-          case false => ZIO.succeed(notAuthenticated)
-          case true =>
-            req.body.asString.flatMap { body =>
-              decodeSaveRequest(body) match {
-                case Left(parseErr) =>
-                  ZIO.succeed(
-                    Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest)
-                  )
-                case Right(saveReq) =>
-                  contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                    portfolio.reload.catchAll(_ => ZIO.unit) *>
-                      ZIO.succeed(jsonResponse(SaveResponse(
-                        success = true,
-                        message = "File saved to GitHub!",
-                        commitUrl = commit.html_url,
-                        rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-                      )))
-                  }.catchAll { err =>
-                    ZIO.succeed(
-                      Response.json(s"""{"error":"Save error: ${err.getMessage}"}""")
-                        .status(Status.InternalServerError)
+      Method.GET / "admin" / "dashboard" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          extractToken(req) match {
+            case None =>
+              ZIO.succeed(Response.redirect(URL.root / "admin"))
+            case Some(token) =>
+              adminSvc.isAuthenticated(token).flatMap {
+                case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
+                case true =>
+                  contentSvc.isWritable.map { writable =>
+                    Response(
+                      status = Status.Ok,
+                      headers = Headers(Header.ContentType(MediaType.text.html)),
+                      body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
                     )
                   }
               }
-            }.orDie
-        }
-      },
+          }
+        },
+
+      // POST /admin/api/request-otp
+      Method.POST / "admin" / "api" / "request-otp" ->
+        Handler.fromFunctionZIO { (_: Request) =>
+          adminSvc.requestOtp.map {
+            case Some(_) => Response.json("""{"message":"OTP sent"}""")
+            case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
+          }
+        },
+
+      // POST /admin/api/verify-otp
+      Method.POST / "admin" / "api" / "verify-otp" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          req.body.asString.flatMap { rawBody =>
+            decodeOtpRequest(rawBody) match {
+              case Left(_) =>
+                ZIO.succeed(
+                  Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest)
+                )
+              case Right(otpReq) =>
+                adminSvc.verifyOtp(otpReq.otp).flatMap {
+                  case None =>
+                    ZIO.succeed(
+                      Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized)
+                    )
+                  case Some(token) =>
+                    val cookie = Cookie.Response(
+                      name = "admin_session",
+                      content = token,
+                      maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
+                      isHttpOnly = true,
+                      sameSite = Some(Cookie.SameSite.Strict),
+                      path = Some(Path.root / "admin")
+                    )
+                    ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
+                }
+            }
+          }.orDie
+        },
+
+      // POST /admin/api/logout
+      Method.POST / "admin" / "api" / "logout" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          extractToken(req) match {
+            case None =>
+              ZIO.succeed(Response.redirect(URL.root / "admin"))
+            case Some(token) =>
+              adminSvc.logout(token).as(
+                Response.json("""{"success":true}""").addCookie(
+                  Cookie.Response(
+                    name = "admin_session",
+                    content = "",
+                    maxAge = Some(java.time.Duration.ZERO),
+                    path = Some(Path.root / "admin")
+                  )
+                )
+              )
+          }
+        },
+
+      // POST /admin/api/files (salvataggio file)
+      Method.POST / "admin" / "api" / "files" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          checkAuth(adminSvc, req).flatMap {
+            case false => ZIO.succeed(notAuthenticated)
+            case true =>
+              req.body.asString.flatMap { body =>
+                decodeSaveRequest(body) match {
+                  case Left(parseErr) =>
+                    ZIO.succeed(
+                      Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest)
+                    )
+                  case Right(saveReq) =>
+                    contentSvc.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                      portfolio.reload.catchAll(_ => ZIO.unit) *>
+                        ZIO.succeed(jsonResponse(SaveResponse(
+                          success = true,
+                          message = "File saved to GitHub!",
+                          commitUrl = commit.html_url,
+                          rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                        )))
+                    }.catchAll { err =>
+                      ZIO.succeed(
+                        Response.json(s"""{"error":"Save error: ${err.getMessage}"}""")
+                          .status(Status.InternalServerError)
+                      )
+                    }
+                }
+              }.orDie
+          }
+        },
 
       // GET /admin/api/files/:section/:filename
       Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
-        Handler.fromFunctionZIO[(String, String, Request)] { (section, filename, req) =>
+        Handler.fromFunctionZIO { (section: String, filename: String, req: Request) =>
           checkAuth(adminSvc, req).flatMap {
             case false => ZIO.succeed(notAuthenticated)
             case true =>
