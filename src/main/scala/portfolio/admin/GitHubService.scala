@@ -22,7 +22,7 @@ case class GitHubCommitResult(sha: String, html_url: String)
 object GitHubCommitResult:
   given JsonDecoder[GitHubCommitResult] = DeriveJsonDecoder.gen[GitHubCommitResult]
 
-case class GitHubCommitResponse(commit: GitHubCommitResult, html_url: String)
+case class GitHubCommitResponse(commit: GitHubCommitResult)
 object GitHubCommitResponse:
   given JsonDecoder[GitHubCommitResponse] = DeriveJsonDecoder.gen[GitHubCommitResponse]
 
