@@ -160,6 +160,7 @@ object AdminRoutes:
           }
         },
 
+      // POST /admin/api/files - salva file
       Method.POST / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
@@ -171,10 +172,13 @@ object AdminRoutes:
                 case false => ZIO.succeed(notAuthenticated)
                 case true =>
                   req.body.asString.flatMap { body =>
+                    ZIO.logInfo(s"Body ricevuto (primi 100 char): ${body.take(100)}") *>
                     decodeSaveRequest(body) match {
                       case Left(parseErr) =>
+                        ZIO.logError(s"Parse error: $parseErr") *>
                         ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
                       case Right(saveReq) =>
+                        ZIO.logInfo(s"File da salvare: ${saveReq.path}") *>
                         cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
                           ps.reload.catchAll(_ => ZIO.unit) *>
                             ZIO.succeed(jsonResponse(SaveResponse(success = true, message = "File saved to GitHub!",
