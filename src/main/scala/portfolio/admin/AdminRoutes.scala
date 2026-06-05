@@ -1,3 +1,4 @@
+```scala
 package portfolio.admin
 
 import portfolio.services.PortfolioService
@@ -172,19 +173,24 @@ object AdminRoutes:
                 case false => ZIO.succeed(notAuthenticated)
                 case true =>
                   req.body.asString.flatMap { body =>
-                    ZIO.logInfo(s"Body ricevuto (primi 100 char): ${body.take(100)}") *>
+                    ZIO.logInfo(s"Body ricevuto: ${body.take(200)}") *>
                     decodeSaveRequest(body) match {
-                      case Left(parseErr) =>
-                        ZIO.logError(s"Parse error: $parseErr") *>
-                        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $parseErr"}""").status(Status.BadRequest))
-                      case Right(saveReq) =>
-                        ZIO.logInfo(s"File da salvare: ${saveReq.path}") *>
-                        cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                      case Left(err) =>
+                        ZIO.logError(s"Parse error: $err") *>
+                        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
+                      case Right(sr) =>
+                        ZIO.logInfo(s"Salvo file: ${sr.path}") *>
+                        cs.writeFile(sr.path, sr.content).flatMap { commit =>
                           ps.reload.catchAll(_ => ZIO.unit) *>
-                            ZIO.succeed(jsonResponse(SaveResponse(success = true, message = "File saved to GitHub!",
+                            ZIO.succeed(jsonResponse(SaveResponse(
+                              success = true,
+                              message = "File saved to GitHub!",
                               commitUrl = commit.html_url,
-                              rebuildNote = "The site will update automatically on Render in ~1-2 minutes.")))
-                        }.catchAll(err => ZIO.succeed(Response.json(s"""{"error":"Save error: ${err.getMessage}"}""").status(Status.InternalServerError)))
+                              rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                            )))
+                        }.catchAll(e => ZIO.succeed(
+                          Response.json(s"""{"error":"Save error: ${e.getMessage}"}""").status(Status.InternalServerError)
+                        ))
                     }
                   }
               }
@@ -212,3 +218,4 @@ object AdminRoutes:
           }
         }
     )
+```
