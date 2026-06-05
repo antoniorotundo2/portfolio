@@ -22,6 +22,8 @@ object AdminViews:
           div(cls := "admin-card")(
             h1(cls := "admin-title")("[ Admin ]"),
             p(cls := "admin-subtitle")("Enter your email to receive the code."),
+            
+            // Step 1: Richiedi OTP
             div(id := "step-request")(
               div(cls := "form-group")(
                 label(`for` := "email")("Email"),
@@ -35,21 +37,31 @@ object AdminViews:
               ),
               button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Request OTP Code")
             ),
+            
+            // Step 2: Verifica OTP
             div(id := "step-verify", display.none)(
-              p(cls := "admin-hint")(s"Code sent to ${AdminConfig.adminEmail}"),
-              div(cls := "form-group")(
-                label(`for` := "otp")("6-digit code"),
-                input(
-                  `type` := "text",
-                  id := "otp",
-                  maxlength := "6",
-                  placeholder := "000000",
-                  cls := "admin-input admin-otp-input"
+              div(cls := "otp-sent-badge")(
+                "✓ Codice inviato a ", AdminConfig.adminEmail
+              ),
+              div(cls := "otp-field")(
+                label(cls := "otp-label", `for` := "otp-1")(
+                  s"Inserisci il codice a ${AdminConfig.otpLength} cifre"
+                ),
+                div(cls := "otp-code-group")(
+                  input(`type` := "text", id := "otp-1", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-2", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-3", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-4", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-5", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-6", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off")
                 )
               ),
-              button(cls := "btn btn-primary admin-btn", onclick := "verifyOtp()")("Sign In"),
-              button(cls := "btn btn-ghost admin-btn", onclick := "backToRequest()")("Back")
+              button(cls := "otp-back", onclick := "backToRequest()")(
+                "← Torna indietro"
+              )
             ),
+            
+            // Messaggi di stato
             div(id := "message", cls := "admin-message")
           )
         ),

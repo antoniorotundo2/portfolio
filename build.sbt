@@ -44,7 +44,7 @@ lazy val root = (project in file("."))
     scalacOptions ++= Seq(
       "-deprecation",
       "-feature",
-      "-Xkind-projector",
+      "-Ykind-projector",
     ),
     Compile / mainClass := Some("portfolio.Main"),
     assembly / assemblyMergeStrategy := {

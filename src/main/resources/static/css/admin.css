@@ -91,6 +91,93 @@
   color: #00ff88;
 }
 
+/* ============================================================
+   OTP Digit Inputs - 6 caselle separate
+   ============================================================ */
+
+.otp-sent-badge {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.75rem;
+  color: #00ff88;
+  padding: 0.6rem 1rem;
+  background: rgba(0, 255, 136, 0.06);
+  border: 1px solid rgba(0, 255, 136, 0.15);
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.otp-field {
+  margin-bottom: 1.25rem;
+}
+
+.otp-label {
+  display: block;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #888;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.otp-code-group {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.otp-digit {
+  width: 44px;
+  height: 52px;
+  padding: 0;
+  background: #0a0a0f;
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-family: 'Space Mono', monospace;
+  font-size: 1.3rem;
+  text-align: center;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  box-sizing: border-box;
+}
+
+.otp-digit:focus {
+  border-color: #00ff88;
+  box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.1);
+}
+
+.otp-digit.filled {
+  border-color: rgba(0, 255, 136, 0.4);
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.otp-digit.error {
+  border-color: #ff3232;
+  box-shadow: 0 0 0 3px rgba(255, 50, 50, 0.1);
+}
+
+.otp-back {
+  width: 100%;
+  padding: 0.7rem;
+  background: transparent;
+  color: #888;
+  border: 1px solid #1e1e2e;
+  border-radius: 6px;
+  font-family: 'Syne', sans-serif;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-top: 0.75rem;
+  transition: all 0.2s;
+}
+
+.otp-back:hover {
+  background: rgba(255, 255, 255, 0.03);
+  color: #ccc;
+}
+
 /* Dashboard */
 .admin-dashboard {
   display: flex;
