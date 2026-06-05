@@ -22,7 +22,7 @@ object AdminViews:
           div(cls := "admin-card")(
             h1(cls := "admin-title")("[ Admin ]"),
             p(cls := "admin-subtitle")("Enter your email to receive the code."),
-            
+
             // Step 1: Richiedi OTP
             div(id := "step-request")(
               div(cls := "form-group")(
@@ -37,7 +37,7 @@ object AdminViews:
               ),
               button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Request OTP Code")
             ),
-            
+
             // Step 2: Verifica OTP
             div(id := "step-verify", display.none)(
               div(cls := "otp-sent-badge")(
@@ -48,19 +48,19 @@ object AdminViews:
                   s"Inserisci il codice a ${AdminConfig.otpLength} cifre"
                 ),
                 div(cls := "otp-code-group")(
-                  input(`type` := "text", id := "otp-1", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-2", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-3", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-4", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-5", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-6", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off")
+                  input(`type` := "text", id := "otp-1", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-2", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-3", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-4", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-5", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-6", maxlength := "1", cls := "otp-digit", attr("inputmode") := "numeric", autocomplete := "off")
                 )
               ),
               button(cls := "otp-back", onclick := "backToRequest()")(
                 "← Torna indietro"
               )
             ),
-            
+
             // Messaggi di stato
             div(id := "message", cls := "admin-message")
           )
