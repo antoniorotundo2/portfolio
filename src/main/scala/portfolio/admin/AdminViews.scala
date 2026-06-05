@@ -48,12 +48,12 @@ object AdminViews:
                   s"Inserisci il codice a ${AdminConfig.otpLength} cifre"
                 ),
                 div(cls := "otp-code-group")(
-                  input(`type` := "text", id := "otp-1", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-2", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-3", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-4", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-5", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off"),
-                  input(`type` := "text", id := "otp-6", maxlength := "1", cls := "otp-digit", inputmode := "numeric", autocomplete := "off")
+                  input(`type` := "text", id := "otp-1", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-2", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-3", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-4", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-5", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off"),
+                  input(`type` := "text", id := "otp-6", maxlength := "1", cls := "otp-digit", inputMode := "numeric", autocomplete := "off")
                 )
               ),
               button(cls := "otp-back", onclick := "backToRequest()")(
