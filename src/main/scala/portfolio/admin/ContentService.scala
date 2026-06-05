@@ -2,6 +2,7 @@ package portfolio.admin
 
 import zio.*
 import zio.http.*
+import zio.json.*
 
 trait ContentService:
   def listFiles: Task[List[ContentFile]]
@@ -10,6 +11,9 @@ trait ContentService:
   def isWritable: UIO[Boolean]
 
 case class ContentFile(relativePath: String, displayName: String, section: String)
+
+object ContentFile:
+  given JsonEncoder[ContentFile] = DeriveJsonEncoder.gen[ContentFile]
 
 object ContentServiceLive:
   val layer: ZLayer[GitHubService, Nothing, ContentService] = ZLayer.fromFunction(Live.apply)

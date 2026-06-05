@@ -19,9 +19,6 @@ object OtpRequest:
 object SaveFileRequest:
   given JsonDecoder[SaveFileRequest] = DeriveJsonDecoder.gen[SaveFileRequest]
 
-object ContentFile:
-  given JsonEncoder[ContentFile] = DeriveJsonEncoder.gen[ContentFile]
-
 object FilesListResponse:
   given JsonEncoder[FilesListResponse] = DeriveJsonEncoder.gen[FilesListResponse]
 
