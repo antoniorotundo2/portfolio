@@ -8,10 +8,9 @@ import zio.json.*
 // --- Modelli di dati ---
 case class OtpRequest(otp: String)
 case class SaveFileRequest(path: String, content: String)
-case class FileInfo(path: String, displayName: String, section: String)
-case class FilesListResponse(files: List[FileInfo], writable: Boolean, isGitHubMode: Boolean)
 case class FileContentResponse(path: String, content: String)
 case class SaveResponse(success: Boolean, message: String, commitUrl: String, rebuildNote: String)
+case class FilesListResponse(files: List[ContentFile], writable: Boolean, isGitHubMode: Boolean)
 
 // --- Codec JSON ---
 object OtpRequest:
@@ -20,8 +19,8 @@ object OtpRequest:
 object SaveFileRequest:
   given JsonDecoder[SaveFileRequest] = DeriveJsonDecoder.gen[SaveFileRequest]
 
-object FileInfo:
-  given JsonEncoder[FileInfo] = DeriveJsonEncoder.gen[FileInfo]
+object ContentFile:
+  given JsonEncoder[ContentFile] = DeriveJsonEncoder.gen[ContentFile]
 
 object FilesListResponse:
   given JsonEncoder[FilesListResponse] = DeriveJsonEncoder.gen[FilesListResponse]
@@ -53,7 +52,6 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
-  // Helper: converte Task[Response] in UIO[Response]
   private def toUIO(task: Task[Response]): UIO[Response] =
     task.catchAll(err => ZIO.succeed(Response.internalServerError(err.getMessage)))
 
@@ -144,6 +142,24 @@ object AdminRoutes:
                       maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))))
               }
             }.provide(adminLayer)
+          }
+        },
+
+      // GET /admin/api/files - lista file
+      Method.GET / "admin" / "api" / "files" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          toUIO {
+            (for {
+              as <- ZIO.service[AdminService]
+              cs <- ZIO.service[ContentService]
+              result <- checkAuth(as, req).flatMap {
+                case false => ZIO.succeed(notAuthenticated)
+                case true =>
+                  cs.listFiles.map { files =>
+                    jsonResponse(FilesListResponse(files, writable = true, isGitHubMode = true))
+                  }.catchAll(_ => ZIO.succeed(Response.json("""{"error":"Cannot list files"}""").status(Status.InternalServerError)))
+              }
+            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
           }
         },
 
