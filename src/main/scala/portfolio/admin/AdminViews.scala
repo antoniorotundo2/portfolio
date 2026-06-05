@@ -22,8 +22,7 @@ object AdminViews:
           div(cls := "admin-card")(
             h1(cls := "admin-title")("[ Admin ]"),
             p(cls := "admin-subtitle")("Enter your email to receive the code."),
-
-            // Step 1: Richiedi OTP
+            
             div(id := "step-request")(
               div(cls := "form-group")(
                 label(`for` := "email")("Email"),
@@ -37,8 +36,7 @@ object AdminViews:
               ),
               button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")("Request OTP Code")
             ),
-
-            // Step 2: Verifica OTP
+            
             div(id := "step-verify", display.none)(
               div(cls := "otp-sent-badge")(
                 "✓ Codice inviato a ", AdminConfig.adminEmail
@@ -60,8 +58,7 @@ object AdminViews:
                 "← Torna indietro"
               )
             ),
-
-            // Messaggi di stato
+            
             div(id := "message", cls := "admin-message")
           )
         ),
@@ -71,7 +68,7 @@ object AdminViews:
 
   def dashboardPage(isWritable: Boolean, isGitHubMode: Boolean): String =
     val badge = if isGitHubMode then "admin-badge-info" else "admin-badge-warn"
-    val text  = if isGitHubMode then "GitHub active" else "Read-only"
+    val text  = if isGitHubMode then "GitHub attivo" else "Sola lettura"
     "<!DOCTYPE html>" + html(lang := "en")(
       headBlock,
       body(cls := "admin-body")(
@@ -98,7 +95,20 @@ object AdminViews:
                     button(cls := "btn btn-primary", onclick := "saveFile()")("Save")
                   )
                 ),
-                textarea(id := "editor-content", cls := "editor-textarea", spellcheck := "false")
+                div(cls := "editor-toolbar")(
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('**', '**')", title := "Bold")("B"),
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('*', '')", title := "Italic")("I"),
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('# ', '')", title := "Heading")("H"),
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('[', '](url)')", title := "Link")("🔗"),
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('`', '`')", title := "Code")("<>"),
+                  button(cls := "toolbar-btn", onclick := "insertMarkdown('- ', '')", title := "List")("≡"),
+                  span(cls := "toolbar-separator"),
+                  button(cls := "toolbar-btn preview-toggle", id := "preview-btn", onclick := "togglePreview()", title := "Preview")("👁 Preview")
+                ),
+                div(cls := "editor-main")(
+                  textarea(id := "editor-content", cls := "editor-textarea", spellcheck := "false"),
+                  div(id := "editor-preview", cls := "editor-preview", display.none)
+                )
               )
             )
           )

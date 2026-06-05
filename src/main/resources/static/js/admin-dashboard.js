@@ -1,5 +1,6 @@
 let currentFile = null;
 
+// ── Carica lista file ────────────────────────────────────
 async function loadFiles() {
   try {
     const r = await fetch('/admin/api/files');
@@ -30,9 +31,9 @@ function renderFileList(files) {
     fs.forEach(f => {
       const b = document.createElement('button');
       b.className = 'file-item';
-      b.textContent = f.displayName || f.path;
-      b.dataset.path = f.path;
-      b.onclick = () => openFile(f.path, b);
+      b.textContent = f.displayName || f.relativePath;
+      b.dataset.path = f.relativePath;
+      b.onclick = () => openFile(f.relativePath, b);
       c.appendChild(b);
     });
   });
@@ -56,6 +57,7 @@ async function openFile(p, b) {
     document.getElementById('editor-container').style.flexDirection = 'column';
     document.getElementById('editor-container').style.flex = '1';
     document.getElementById('save-status').textContent = '';
+    updatePreview();
   } catch (e) {
     console.error(e);
   }
@@ -64,7 +66,7 @@ async function openFile(p, b) {
 async function saveFile() {
   if (!currentFile) return;
   const s = document.getElementById('save-status');
-  s.textContent = 'Committing...';
+  s.textContent = 'Salvataggio...';
   s.className = 'save-status';
   try {
     const c = document.getElementById('editor-content').value;
@@ -94,6 +96,86 @@ async function saveFile() {
   }, 10000);
 }
 
+// ── Toolbar Markdown ────────────────────────────────────
+function insertMarkdown(before, after) {
+  const ta = document.getElementById('editor-content');
+  const start = ta.selectionStart;
+  const end = ta.selectionEnd;
+  const text = ta.value;
+  const selected = text.substring(start, end);
+  ta.value = text.substring(0, start) + before + selected + after + text.substring(end);
+  ta.focus();
+  ta.selectionStart = start + before.length;
+  ta.selectionEnd = start + before.length + selected.length;
+  updatePreview();
+}
+
+// ── Anteprima ────────────────────────────────────────────
+function togglePreview() {
+  const main = document.querySelector('.editor-main');
+  const btn = document.getElementById('preview-btn');
+  main.classList.toggle('split-view');
+  btn.classList.toggle('preview-active');
+  if (main.classList.contains('split-view')) {
+    btn.innerHTML = '✕ Close';
+  } else {
+    btn.innerHTML = '👁 Preview';
+  }
+  updatePreview();
+}
+
+function updatePreview() {
+  const preview = document.getElementById('editor-preview');
+  const main = document.querySelector('.editor-main');
+  if (!preview || !main.classList.contains('split-view')) return;
+  const md = document.getElementById('editor-content').value;
+  preview.innerHTML = parseMarkdown(md);
+}
+
+document.getElementById('editor-content')?.addEventListener('input', updatePreview);
+
+// ── Parser Markdown ──────────────────────────────────────
+function parseMarkdown(md) {
+  // Code blocks (must be first)
+  md = md.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+  
+  // Headers
+  md = md.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+  md = md.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  md = md.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  md = md.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  
+  // Bold e italic
+  md = md.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+  md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  md = md.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  
+  // Images
+  md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
+  
+  // Links
+  md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+  
+  // Code inline
+  md = md.replace(/`([^`]+)`/g, '<code>$1</code>');
+  
+  // HR
+  md = md.replace(/^---$/gm, '<hr>');
+  
+  // Blockquote
+  md = md.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
+  
+  // Liste
+  md = md.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+  md = md.replace(/^- (.+)$/gm, '<li>$1</li>');
+  
+  // Paragrafi (linea vuota = nuovo paragrafo)
+  md = md.replace(/\n\n/g, '</p><p>');
+  md = md.replace(/\n/g, '<br>');
+  
+  return '<p>' + md + '</p>';
+}
+
 async function logout() {
   await fetch('/admin/api/logout', { method: 'POST' });
   window.location.href = '/admin';
@@ -106,4 +188,5 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Avvio ────────────────────────────────────────────────
 loadFiles();
