@@ -1,4 +1,3 @@
-```scala
 package portfolio.admin
 
 import portfolio.services.PortfolioService
@@ -161,6 +160,26 @@ object AdminRoutes:
           }
         },
 
+      // GET /admin/api/files/get?filename=... - leggi file
+      Method.GET / "admin" / "api" / "files" / "get" ->
+        Handler.fromFunctionZIO { (req: Request) =>
+          toUIO {
+            (for {
+              as <- ZIO.service[AdminService]
+              cs <- ZIO.service[ContentService]
+              filename = req.url.queryParams.getAll("filename").headOption.getOrElse("")
+              result <- checkAuth(as, req).flatMap {
+                case false => ZIO.succeed(notAuthenticated)
+                case true =>
+                  ZIO.logInfo(s"Lettura file: $filename") *>
+                  cs.readFile(filename).flatMap(content =>
+                    ZIO.succeed(jsonResponse(FileContentResponse(filename, content)))
+                  ).catchAll(_ => ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound)))
+              }
+            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
+          }
+        },
+
       // POST /admin/api/files - salva file
       Method.POST / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
@@ -174,48 +193,24 @@ object AdminRoutes:
                 case true =>
                   req.body.asString.flatMap { body =>
                     ZIO.logInfo(s"Body ricevuto: ${body.take(200)}") *>
-                    decodeSaveRequest(body) match {
-                      case Left(err) =>
-                        ZIO.logError(s"Parse error: $err") *>
-                        ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: $err"}""").status(Status.BadRequest))
-                      case Right(sr) =>
-                        ZIO.logInfo(s"Salvo file: ${sr.path}") *>
-                        cs.writeFile(sr.path, sr.content).flatMap { commit =>
-                          ps.reload.catchAll(_ => ZIO.unit) *>
-                            ZIO.succeed(jsonResponse(SaveResponse(
-                              success = true,
-                              message = "File saved to GitHub!",
-                              commitUrl = commit.html_url,
-                              rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-                            )))
-                        }.catchAll(e => ZIO.succeed(
-                          Response.json(s"""{"error":"Save error: ${e.getMessage}"}""").status(Status.InternalServerError)
-                        ))
+                    ZIO.fromEither(decodeSaveRequest(body)).flatMap { saveReq =>
+                      ZIO.logInfo(s"Salvo file: ${saveReq.path}") *>
+                      cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                        ps.reload.catchAll(_ => ZIO.unit) *>
+                          ZIO.succeed(jsonResponse(SaveResponse(
+                            success = true,
+                            message = "File saved to GitHub!",
+                            commitUrl = commit.html_url,
+                            rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
+                          )))
+                      }
+                    }.catchAll { parseErr =>
+                      ZIO.logError(s"Parse error: ${parseErr}") *>
+                      ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: ${parseErr}"}""").status(Status.BadRequest))
                     }
                   }
               }
             } yield result).provide(adminLayer ++ contentLayer ++ portLayer ++ clientLayer)
           }
-        },
-
-      Method.GET / "admin" / "api" / "files" / string("section") / string("filename") ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              cs <- ZIO.service[ContentService]
-              pathParts = req.path.encode.split("/").drop(4)
-              section   = if pathParts.length >= 1 then pathParts(0) else ""
-              filename  = if pathParts.length >= 2 then pathParts(1) else ""
-              result <- checkAuth(as, req).flatMap {
-                case false => ZIO.succeed(notAuthenticated)
-                case true =>
-                  cs.readFile(s"$section/$filename").flatMap(content =>
-                    ZIO.succeed(jsonResponse(FileContentResponse(s"$section/$filename", content)))
-                  ).catchAll(_ => ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound)))
-              }
-            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
-          }
         }
     )
-```

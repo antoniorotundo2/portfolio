@@ -54,7 +54,6 @@ object GitHubServiceLive:
     private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
       ZIO.scoped(ZIO.serviceWithZIO[Client](_.batched(req)))
 
-    // Helper: parse JSON with Throwable error (not String)
     private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
       body.fromJson[GitHubFileResponse]
         .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
@@ -63,7 +62,6 @@ object GitHubServiceLive:
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
       val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
 
-      // Explicit chain: all branches return ZIO[Client, Throwable, String]
       safeRequest(Request.get(url).addHeaders(apiHeaders))
         .flatMap { response =>
           if !response.status.isSuccess then
@@ -76,12 +74,10 @@ object GitHubServiceLive:
                   case Right(fileResp) =>
                     fileResp.content match
                       case Some(b64) =>
-                        // Wrap pure value in ZIO.succeed to keep Client environment
                         ZIO.succeed(decodeBase64(b64.replace("\n", "")))
                       case None =>
                         fileResp.download_url match
                           case Some(dlUrl) =>
-                            // safeRequest requires Client: consistent
                             safeRequest(Request.get(dlUrl)).flatMap(_.body.asString)
                           case None =>
                             ZIO.fail(new RuntimeException("No content available"))
@@ -108,7 +104,7 @@ object GitHubServiceLive:
 
       for
         existingSha <- getSha
-        request: GitHubCreateUpdateRequest = GitHubCreateUpdateRequest(
+        request = GitHubCreateUpdateRequest(
           message = s"${AdminConfig.commitMessagePrefix} $commitMessage",
           content = encodeBase64(content),
           sha = existingSha,
@@ -117,7 +113,7 @@ object GitHubServiceLive:
           committer = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail))
         )
         requestJson = summon[JsonEncoder[GitHubCreateUpdateRequest]].encodeJson(request, None).toString
-        response <- safeRequest(Request.post(url, Body.fromString(requestJson)).addHeaders(apiHeaders))
+        response <- safeRequest(Request.put(url, Body.fromString(requestJson)).addHeaders(apiHeaders))
         _ <- ZIO.unless(response.status.isSuccess)(
           response.body.asString.flatMap(b => ZIO.fail(new RuntimeException(s"Commit failed [${response.status}]: $b")))
         )

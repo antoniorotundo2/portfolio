@@ -1,9 +1,8 @@
 let currentFile = null;
 
-// ── Carica lista file ────────────────────────────────────
 async function loadFiles() {
   try {
-    const r = await fetch('/admin/api/files');
+    const r = await fetch('/admin/api/files', { credentials: 'include' });
     if (r.status === 401) {
       window.location.href = '/admin';
       return;
@@ -43,7 +42,7 @@ async function openFile(p, b) {
   document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
   if (b) b.classList.add('active');
   try {
-    const r = await fetch('/admin/api/files/' + p);
+    const r = await fetch('/admin/api/files/get?filename=' + encodeURIComponent(p), { credentials: 'include' });
     if (r.status === 401) {
       window.location.href = '/admin';
       return;
@@ -73,7 +72,8 @@ async function saveFile() {
     const r = await fetch('/admin/api/files', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: currentFile, content: c })
+      body: JSON.stringify({ path: currentFile, content: c }),
+      credentials: 'include'
     });
     if (r.status === 401) {
       window.location.href = '/admin';
@@ -96,7 +96,6 @@ async function saveFile() {
   }, 10000);
 }
 
-// ── Toolbar Markdown ────────────────────────────────────
 function insertMarkdown(before, after) {
   const ta = document.getElementById('editor-content');
   const start = ta.selectionStart;
@@ -110,7 +109,6 @@ function insertMarkdown(before, after) {
   updatePreview();
 }
 
-// ── Anteprima ────────────────────────────────────────────
 function togglePreview() {
   const main = document.querySelector('.editor-main');
   const btn = document.getElementById('preview-btn');
@@ -134,50 +132,29 @@ function updatePreview() {
 
 document.getElementById('editor-content')?.addEventListener('input', updatePreview);
 
-// ── Parser Markdown ──────────────────────────────────────
 function parseMarkdown(md) {
-  // Code blocks (must be first)
   md = md.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
-  
-  // Headers
   md = md.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
   md = md.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   md = md.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   md = md.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-  
-  // Bold e italic
   md = md.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>');
   md = md.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   md = md.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  
-  // Images
   md = md.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1">');
-  
-  // Links
   md = md.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-  
-  // Code inline
   md = md.replace(/`([^`]+)`/g, '<code>$1</code>');
-  
-  // HR
   md = md.replace(/^---$/gm, '<hr>');
-  
-  // Blockquote
   md = md.replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>');
-  
-  // Liste
   md = md.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
   md = md.replace(/^- (.+)$/gm, '<li>$1</li>');
-  
-  // Paragrafi (linea vuota = nuovo paragrafo)
   md = md.replace(/\n\n/g, '</p><p>');
   md = md.replace(/\n/g, '<br>');
-  
   return '<p>' + md + '</p>';
 }
 
 async function logout() {
-  await fetch('/admin/api/logout', { method: 'POST' });
+  await fetch('/admin/api/logout', { method: 'POST', credentials: 'include' });
   window.location.href = '/admin';
 }
 
@@ -188,5 +165,4 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── Avvio ────────────────────────────────────────────────
 loadFiles();
