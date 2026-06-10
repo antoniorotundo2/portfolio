@@ -1,216 +1,137 @@
-package portfolio.admin
+package portfolio.routes
 
+import portfolio.models.*
 import portfolio.services.PortfolioService
+import portfolio.views.*
 import zio.*
 import zio.http.*
-import zio.json.*
 
-// --- Modelli di dati ---
-case class OtpRequest(otp: String)
-case class SaveFileRequest(path: String, content: String)
-case class FileContentResponse(path: String, content: String)
-case class SaveResponse(success: Boolean, message: String, commitUrl: String, rebuildNote: String)
-case class FilesListResponse(files: List[ContentFile], writable: Boolean, isGitHubMode: Boolean)
+object AppRoutes:
 
-// --- Codec JSON ---
-object OtpRequest:
-  given JsonDecoder[OtpRequest] = DeriveJsonDecoder.gen[OtpRequest]
+  private def htmlResponse(content: String): Response =
+    Response(
+      status  = Status.Ok,
+      headers = Headers(Header.ContentType(MediaType.text.html)),
+      body    = Body.fromString(content),
+    )
 
-object SaveFileRequest:
-  given JsonDecoder[SaveFileRequest] = DeriveJsonDecoder.gen[SaveFileRequest]
+  private def notFoundResponse(layout: portfolio.models.LayoutConfig, nf: portfolio.models.NotFoundConfig): Response =
+    Response(
+      status  = Status.NotFound,
+      headers = Headers(Header.ContentType(MediaType.text.html)),
+      body    = Body.fromString(NotFoundView.render(layout, nf)),
+    )
 
-object FilesListResponse:
-  given JsonEncoder[FilesListResponse] = DeriveJsonEncoder.gen[FilesListResponse]
+  val routes: Routes[PortfolioService, Nothing] =
+    Routes(
 
-object FileContentResponse:
-  given JsonEncoder[FileContentResponse] = DeriveJsonEncoder.gen[FileContentResponse]
-
-object SaveResponse:
-  given JsonEncoder[SaveResponse] = DeriveJsonEncoder.gen[SaveResponse]
-
-// --- Routes ---
-object AdminRoutes:
-
-  private def extractToken(req: Request): Option[String] =
-    req.cookies.find(_.name == "admin_session").map(_.content)
-
-  private def jsonResponse[A](value: A)(using encoder: JsonEncoder[A]): Response =
-    Response.json(encoder.encodeJson(value, None).toString)
-
-  private val notAuthenticated: Response =
-    Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}"""))
-
-  private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
-    adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
-
-  private def decodeSaveRequest(body: String): Either[String, SaveFileRequest] =
-    summon[JsonDecoder[SaveFileRequest]].decodeJson(body)
-
-  private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
-    summon[JsonDecoder[OtpRequest]].decodeJson(body)
-
-  private def toUIO(task: Task[Response]): UIO[Response] =
-    task.catchAll(err => ZIO.succeed(Response.internalServerError(err.getMessage)))
-
-  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
-    for
-      adminSvc   <- ZIO.service[AdminService]
-      contentSvc <- ZIO.service[ContentService]
-      portfolio  <- ZIO.service[PortfolioService]
-      client     <- ZIO.service[Client]
-      adminLayer   = ZLayer.succeed(adminSvc)
-      contentLayer = ZLayer.succeed(contentSvc)
-      portLayer    = ZLayer.succeed(portfolio)
-      clientLayer  = ZLayer.succeed(client)
-    yield Routes(
-
-      Method.GET / "admin" ->
-        Handler.fromFunction { (_: Request) =>
-          Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)),
-            body = Body.fromString(AdminViews.loginPage))
+      // ── Static files ────────────────────────────────────────────────────────
+      Method.GET / "static" / "css" / string("file") ->
+        handler { (file: String, _: Request) =>
+          ZIO.attemptBlocking {
+            val stream = getClass.getResourceAsStream(s"/static/css/$file")
+            if stream == null then Response.notFound
+            else
+              Response(
+                status  = Status.Ok,
+                headers = Headers(Header.ContentType(MediaType.text.css)),
+                body    = Body.fromArray(stream.readAllBytes()),
+              )
+          }.orDie
         },
 
-      Method.GET / "admin" / "dashboard" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              cs <- ZIO.service[ContentService]
-              result <- extractToken(req) match {
-                case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
-                case Some(token) =>
-                  as.isAuthenticated(token).flatMap {
-                    case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
-                    case true =>
-                      cs.isWritable.map { writable =>
-                        Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)),
-                          body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true)))
-                      }
-                  }
-              }
-            } yield result).provide(adminLayer ++ contentLayer)
-          }
+      Method.GET / "static" / "js" / string("file") ->
+        handler { (file: String, _: Request) =>
+          ZIO.attemptBlocking {
+            val stream = getClass.getResourceAsStream(s"/static/js/$file")
+            if stream == null then Response.notFound
+            else
+              Response(
+                status  = Status.Ok,
+                headers = Headers(Header.ContentType(MediaType.application.`javascript`)),
+                body    = Body.fromArray(stream.readAllBytes()),
+              )
+          }.orDie
         },
 
-      Method.POST / "admin" / "api" / "request-otp" ->
-        Handler.fromFunctionZIO { (_: Request) =>
-          toUIO {
-            ZIO.serviceWithZIO[AdminService](_.requestOtp)
-              .map {
-                case Some(_) => Response.json("""{"message":"OTP sent"}""")
-                case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
-              }
-              .provide(adminLayer)
-          }
+      // ── Home ────────────────────────────────────────────────────────────────
+      Method.GET / "" ->
+        handler { (_: Request) =>
+          for {
+            svc      <- ZIO.service[PortfolioService]
+            layout   <- svc.getLayout
+            home     <- svc.getHomeConfig
+            profile  <- svc.getProfile
+            projects <- svc.getProjects
+            posts    <- svc.getBlogPosts
+          } yield htmlResponse(HomeView.render(layout, home, profile, projects, posts))
         },
 
-      Method.POST / "admin" / "api" / "verify-otp" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              result <- req.body.asString.flatMap { rawBody =>
-                decodeOtpRequest(rawBody) match {
-                  case Left(_) => ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
-                  case Right(otpReq) =>
-                    as.verifyOtp(otpReq.otp).flatMap {
-                      case None => ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
-                      case Some(token) =>
-                        val cookie = Cookie.Response(name = "admin_session", content = token,
-                          maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
-                          isHttpOnly = true, sameSite = Some(Cookie.SameSite.Strict), path = Some(Path.root / "admin"))
-                        ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
-                    }
-                }
-              }
-            } yield result).provide(adminLayer)
-          }
+      // ── Projects ────────────────────────────────────────────────────────────
+      Method.GET / "projects" ->
+        handler { (_: Request) =>
+          for {
+            svc      <- ZIO.service[PortfolioService]
+            layout   <- svc.getLayout
+            cfg      <- svc.getProjectsConfig
+            projects <- svc.getProjects
+          } yield htmlResponse(ProjectsView.render(layout, cfg, projects))
         },
 
-      Method.POST / "admin" / "api" / "logout" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            ZIO.serviceWithZIO[AdminService] { as =>
-              extractToken(req) match {
-                case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
-                case Some(token) =>
-                  as.logout(token).as(Response.json("""{"success":true}""").addCookie(
-                    Cookie.Response(name = "admin_session", content = "",
-                      maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))))
-              }
-            }.provide(adminLayer)
-          }
+      // ── Blog list ────────────────────────────────────────────────────────────
+      Method.GET / "blog" ->
+        handler { (_: Request) =>
+          for {
+            svc    <- ZIO.service[PortfolioService]
+            layout <- svc.getLayout
+            cfg    <- svc.getBlogConfig
+            posts  <- svc.getBlogPosts
+          } yield htmlResponse(BlogView.render(layout, cfg, posts))
         },
 
-      // GET /admin/api/files - lista file
-      Method.GET / "admin" / "api" / "files" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              cs <- ZIO.service[ContentService]
-              result <- checkAuth(as, req).flatMap {
-                case false => ZIO.succeed(notAuthenticated)
-                case true =>
-                  cs.listFiles.map { files =>
-                    jsonResponse(FilesListResponse(files, writable = true, isGitHubMode = true))
-                  }.catchAll(_ => ZIO.succeed(Response.json("""{"error":"Cannot list files"}""").status(Status.InternalServerError)))
-              }
-            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
-          }
+      // ── Blog post ────────────────────────────────────────────────────────────
+      Method.GET / "blog" / string("slug") ->
+        handler { (slug: String, _: Request) =>
+          for {
+            svc    <- ZIO.service[PortfolioService]
+            layout <- svc.getLayout
+            cfg    <- svc.getBlogConfig
+            nf     <- svc.getNotFoundConfig
+            post   <- svc.getBlogPost(slug)
+          } yield post.fold(notFoundResponse(layout, nf))(p => htmlResponse(BlogPostView.render(layout, cfg, p)))
         },
 
-      // GET /admin/api/files/get?filename=... - leggi file
-      Method.GET / "admin" / "api" / "files" / "get" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              cs <- ZIO.service[ContentService]
-              filename = req.url.queryParams.getAll("filename").headOption.getOrElse("")
-              result <- checkAuth(as, req).flatMap {
-                case false => ZIO.succeed(notAuthenticated)
-                case true =>
-                  ZIO.logInfo(s"Lettura file: $filename") *>
-                  cs.readFile(filename).flatMap(content =>
-                    ZIO.succeed(jsonResponse(FileContentResponse(filename, content)))
-                  ).catchAll(_ => ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound)))
-              }
-            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
-          }
+      // ── JSON API ─────────────────────────────────────────────────────────────
+      Method.GET / "api" / "projects" ->
+        handler { (_: Request) =>
+          import zio.json.*
+          for {
+            svc      <- ZIO.service[PortfolioService]
+            projects <- svc.getProjects
+          } yield Response.json(projects.toJson)
         },
 
-      // POST /admin/api/files - salva file
-      Method.POST / "admin" / "api" / "files" ->
-        Handler.fromFunctionZIO { (req: Request) =>
-          toUIO {
-            (for {
-              as <- ZIO.service[AdminService]
-              cs <- ZIO.service[ContentService]
-              ps <- ZIO.service[PortfolioService]
-              result <- checkAuth(as, req).flatMap {
-                case false => ZIO.succeed(notAuthenticated)
-                case true =>
-                  req.body.asString.flatMap { body =>
-                    ZIO.logInfo(s"Body ricevuto: ${body.take(200)}") *>
-                    ZIO.fromEither(decodeSaveRequest(body)).flatMap { saveReq =>
-                      ZIO.logInfo(s"Salvo file: ${saveReq.path}") *>
-                      cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                        ps.reload.catchAll(_ => ZIO.unit) *>
-                          ZIO.succeed(jsonResponse(SaveResponse(
-                            success = true,
-                            message = "File saved to GitHub!",
-                            commitUrl = commit.html_url,
-                            rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-                          )))
-                      }
-                    }.catchAll { parseErr =>
-                      ZIO.logError(s"Parse error: ${parseErr}") *>
-                      ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: ${parseErr}"}""").status(Status.BadRequest))
-                    }
-                  }
-              }
-            } yield result).provide(adminLayer ++ contentLayer ++ portLayer ++ clientLayer)
-          }
-        }
+      Method.GET / "api" / "posts" ->
+        handler { (_: Request) =>
+          import zio.json.*
+          for {
+            svc   <- ZIO.service[PortfolioService]
+            posts <- svc.getBlogPosts
+          } yield Response.json(posts.toJson)
+        },
+
+      // ── 404 Catch-all (DEVE essere l'ultima rotta) ──────────────────────────
+      Method.ANY / trailing ->
+        handler { (_: Path, _: Request) =>
+          ZIO.serviceWithZIO[PortfolioService] { svc =>
+            for
+              layout <- svc.getLayout
+              nf     <- svc.getNotFoundConfig
+            yield Response(
+              status = Status.NotFound,
+              headers = Headers(Header.ContentType(MediaType.text.html)),
+              body = Body.fromString(NotFoundView.render(layout, nf))
+            )
+          }.catchAll(_ => ZIO.succeed(Response.notFound))
+        },
     )
