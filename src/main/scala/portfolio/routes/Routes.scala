@@ -127,6 +127,6 @@ object AppRoutes:
             svc.getLayout.zip(svc.getNotFoundConfig).map { case (layout, nf) =>
               notFoundHtml(layout, nf)
             }
-          }.catchAll(_ => ZIO.succeed(Response.notFound))
+          }
         },
     )
