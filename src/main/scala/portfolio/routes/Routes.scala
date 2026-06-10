@@ -120,13 +120,13 @@ object AppRoutes:
           } yield Response.json(posts.toJson)
         },
 
-      // ── 404 Catch-all (DEVE essere l'ultima rotta) ──────────────────────────
+      // ── 404 Catch-all per qualsiasi path non matchato (DEVE essere l'ultima) ─
       Method.ANY / trailing ->
         handler { (_: Path, _: Request) =>
-          (for {
-            svc    <- ZIO.service[PortfolioService]
-            layout <- svc.getLayout
-            nf     <- svc.getNotFoundConfig
-          } yield notFoundHtml(layout, nf)).catchAll(_ => ZIO.succeed(Response.notFound))
+          ZIO.serviceWithZIO[PortfolioService] { svc =>
+            svc.getLayout.zip(svc.getNotFoundConfig).map { case (layout, nf) =>
+              notFoundHtml(layout, nf)
+            }
+          }.catchAll(_ => ZIO.succeed(Response.notFound))
         },
     )
