@@ -132,6 +132,6 @@ object AppRoutes:
               headers = Headers(Header.ContentType(MediaType.text.html)),
               body = Body.fromString(NotFoundView.render(layout, nf))
             )
-          }.catchAll(_ => ZIO.succeed(Response.notFound))
+          }.orElse(ZIO.succeed(Response.notFound))
         },
     )
