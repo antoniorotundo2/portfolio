@@ -8,14 +8,14 @@ import zio.http.*
 
 object AppRoutes:
 
-  private def htmlResponse(content: String): Response =
+  private def okHtml(content: String): Response =
     Response(
       status  = Status.Ok,
       headers = Headers(Header.ContentType(MediaType.text.html)),
       body    = Body.fromString(content),
     )
 
-  private def notFoundResponse(layout: portfolio.models.LayoutConfig, nf: portfolio.models.NotFoundConfig): Response =
+  private def notFoundHtml(layout: portfolio.models.LayoutConfig, nf: portfolio.models.NotFoundConfig): Response =
     Response(
       status  = Status.NotFound,
       headers = Headers(Header.ContentType(MediaType.text.html)),
@@ -64,7 +64,7 @@ object AppRoutes:
             profile  <- svc.getProfile
             projects <- svc.getProjects
             posts    <- svc.getBlogPosts
-          } yield htmlResponse(HomeView.render(layout, home, profile, projects, posts))
+          } yield okHtml(HomeView.render(layout, home, profile, projects, posts))
         },
 
       // ── Projects ────────────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ object AppRoutes:
             layout   <- svc.getLayout
             cfg      <- svc.getProjectsConfig
             projects <- svc.getProjects
-          } yield htmlResponse(ProjectsView.render(layout, cfg, projects))
+          } yield okHtml(ProjectsView.render(layout, cfg, projects))
         },
 
       // ── Blog list ────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ object AppRoutes:
             layout <- svc.getLayout
             cfg    <- svc.getBlogConfig
             posts  <- svc.getBlogPosts
-          } yield htmlResponse(BlogView.render(layout, cfg, posts))
+          } yield okHtml(BlogView.render(layout, cfg, posts))
         },
 
       // ── Blog post ────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ object AppRoutes:
             cfg    <- svc.getBlogConfig
             nf     <- svc.getNotFoundConfig
             post   <- svc.getBlogPost(slug)
-          } yield post.fold(notFoundResponse(layout, nf))(p => htmlResponse(BlogPostView.render(layout, cfg, p)))
+          } yield post.fold(notFoundHtml(layout, nf))(p => okHtml(BlogPostView.render(layout, cfg, p)))
         },
 
       // ── JSON API ─────────────────────────────────────────────────────────────
@@ -123,15 +123,10 @@ object AppRoutes:
       // ── 404 Catch-all (DEVE essere l'ultima rotta) ──────────────────────────
       Method.ANY / trailing ->
         handler { (_: Path, _: Request) =>
-          ZIO.serviceWithZIO[PortfolioService] { svc =>
-            for
-              layout <- svc.getLayout
-              nf     <- svc.getNotFoundConfig
-            yield Response(
-              status = Status.NotFound,
-              headers = Headers(Header.ContentType(MediaType.text.html)),
-              body = Body.fromString(NotFoundView.render(layout, nf))
-            )
-          }.orElse(ZIO.succeed(Response.notFound))
+          (for {
+            svc    <- ZIO.service[PortfolioService]
+            layout <- svc.getLayout
+            nf     <- svc.getNotFoundConfig
+          } yield notFoundHtml(layout, nf)).catchAll(_ => ZIO.succeed(Response.notFound))
         },
     )
