@@ -119,4 +119,19 @@ object AppRoutes:
             posts <- svc.getBlogPosts
           } yield Response.json(posts.toJson)
         },
+
+      // ── 404 Catch-all (DEVE essere l'ultima rotta) ──────────────────────────
+      Method.ANY / trailing ->
+        handler { (_: Path, _: Request) =>
+          ZIO.serviceWithZIO[PortfolioService] { svc =>
+            for
+              layout <- svc.getLayout
+              nf     <- svc.getNotFoundConfig
+            yield Response(
+              status = Status.NotFound,
+              headers = Headers(Header.ContentType(MediaType.text.html)),
+              body = Body.fromString(NotFoundView.render(layout, nf))
+            )
+          }.catchAll(_ => ZIO.succeed(Response.notFound))
+        },
     )
