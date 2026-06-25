@@ -46,10 +46,13 @@ object AppRoutes:
             Header.Custom("ETag", asset.etag),
             Header.Custom("Cache-Control", "public, max-age=3600, must-revalidate")
           )
-          // Revalidazione: se l'ETag del client combacia, rispondiamo 304 senza corpo.
-          val ifNoneMatch = req.headers.get("If-None-Match")
-          if ifNoneMatch.contains(asset.etag) then
-            Response(status = Status.NotModified, headers = cacheHeaders)
+          // Revalidazione weak-aware: con la compressione gzip l'ETag può diventare weak (W/"..."),
+          // quindi confrontiamo ignorando il prefisso W/ e gestendo liste di valori.
+          def normalize(t: String) = t.trim.stripPrefix("W/")
+          val matches = req.headers
+            .get("If-None-Match")
+            .exists(_.split(",").exists(normalize(_) == normalize(asset.etag)))
+          if matches then Response(status = Status.NotModified, headers = cacheHeaders)
           else
             Response(status = Status.Ok, headers = cacheHeaders, body = Body.fromArray(asset.bytes))
 
