@@ -26,8 +26,16 @@ FROM eclipse-temurin:25-jre-alpine AS runtime
 WORKDIR /app
 COPY --from=builder /build/target/scala-*/portfolio-assembly-*.jar app.jar
 EXPOSE 8080
+# Flag pensati per il piano free di Render (~512MB, CPU condivisa):
+#  - MaxRAMPercentage 55%: lascia spazio off-heap (buffer direct di Netty/ZIO-HTTP) → evita OOM
+#  - MaxDirectMemorySize: tetto esplicito ai buffer direct (default ≈ heap, troppo alto qui)
+#  - UseSerialGC: minor footprint/overhead del G1 su heap piccoli e single-core
+#  - ExitOnOutOfMemoryError: in caso di OOM il container esce e Render lo riavvia (no stato zombie)
 ENTRYPOINT ["java", \
   "--enable-native-access=ALL-UNNAMED", \
   "-XX:+UseContainerSupport", \
-  "-XX:MaxRAMPercentage=75.0", \
+  "-XX:MaxRAMPercentage=55.0", \
+  "-XX:MaxDirectMemorySize=64m", \
+  "-XX:+UseSerialGC", \
+  "-XX:+ExitOnOutOfMemoryError", \
   "-jar", "app.jar"]

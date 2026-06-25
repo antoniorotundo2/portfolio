@@ -6,3 +6,9 @@ project/project/
 *.md
 .scalafmt.conf
 .bsp/
+.metals/
+.bloop/
+.idea/
+.vscode/
+.DS_Store
+*.log
