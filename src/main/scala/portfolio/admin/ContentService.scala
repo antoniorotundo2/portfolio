@@ -1,5 +1,6 @@
 package portfolio.admin
 
+import portfolio.services.ContentValidator
 import zio.*
 import zio.http.*
 import zio.json.*
@@ -40,5 +41,11 @@ object ContentServiceLive:
     def isWritable: UIO[Boolean]           = ZIO.succeed(AdminConfig.githubToken.nonEmpty)
     def listFiles: Task[List[ContentFile]] = ZIO.succeed(knownFiles)
     def readFile(p: String): Task[String]  = validated(p).flatMap(gh.getFileContent)
+
     def writeFile(p: String, c: String): Task[GitHubCommitResult] =
-      validated(p).flatMap(gh.updateFile(_, c, s"Update $p"))
+      for
+        vp <- validated(p)
+        // Valida il contenuto prima del commit: un file malformato impedirebbe il boot al redeploy.
+        _      <- ZIO.fromEither(ContentValidator.validate(vp, c)).mapError(new RuntimeException(_))
+        commit <- gh.updateFile(vp, c, s"Update $vp")
+      yield commit

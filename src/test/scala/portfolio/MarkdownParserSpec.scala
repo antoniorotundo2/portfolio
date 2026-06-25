@@ -21,19 +21,19 @@ object MarkdownParserSpec extends ZIOSpecDefault:
       assertTrue(
         MarkdownParser.frontString(fm, "title").contains("Ciao"),
         MarkdownParser.frontList(fm, "tags") == List("scala", "zio"),
-        html.contains("<h1>Titolo</h1>"),
+        html.contains("<h1>Titolo</h1>")
       )
     },
     test("escapa l'HTML grezzo nel Markdown (no XSS)") {
-      val raw = "Testo <script>alert('xss')</script> fine"
+      val raw       = "Testo <script>alert('xss')</script> fine"
       val (_, html) = MarkdownParser.parse(raw)
       assertTrue(
         !html.contains("<script>"),
-        html.contains("&lt;script&gt;"),
+        html.contains("&lt;script&gt;")
       )
     },
     test("neutralizza URL pericolosi nei link") {
-      val raw = "[click](javascript:alert(1))"
+      val raw       = "[click](javascript:alert(1))"
       val (_, html) = MarkdownParser.parse(raw)
       assertTrue(!html.contains("javascript:alert"))
     },
@@ -46,5 +46,5 @@ object MarkdownParserSpec extends ZIOSpecDefault:
           |""".stripMargin
       val (fm, _) = MarkdownParser.parse(raw)
       assertTrue(MarkdownParser.frontString(fm, "title").contains("ok"))
-    },
+    }
   )

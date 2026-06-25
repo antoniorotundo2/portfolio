@@ -23,12 +23,27 @@ object ContentServiceSpec extends ZIOSpecDefault:
       for exit <- ZIO.serviceWithZIO[ContentService](_.readFile("../../../build.sbt")).exit
       yield assertTrue(exit.isFailure)
     },
-    test("scrive un path in whitelist") {
-      for r <- ZIO.serviceWithZIO[ContentService](_.writeFile("home/home.md", "x"))
+    test("scrive un path in whitelist con contenuto valido") {
+      val validLayout =
+        """---
+          |logoText: AR
+          |footerCopy: "© 2026"
+          |footerBuiltWith: Scala + ZIO
+          |---
+          |""".stripMargin
+      for r <- ZIO.serviceWithZIO[ContentService](_.writeFile("layout/layout.md", validLayout))
       yield assertTrue(r.sha == "sha123")
     },
-    test("rifiuta la scrittura di un path arbitrario") {
-      for exit <- ZIO.serviceWithZIO[ContentService](_.writeFile(".github/workflows/x.yml", "evil")).exit
+    test("rifiuta la scrittura di contenuto malformato (boot-safety)") {
+      for exit <- ZIO.serviceWithZIO[ContentService](_.writeFile(
+          "layout/layout.md",
+          "niente frontmatter"
+        )).exit
       yield assertTrue(exit.isFailure)
     },
+    test("rifiuta la scrittura di un path arbitrario") {
+      for exit <-
+          ZIO.serviceWithZIO[ContentService](_.writeFile(".github/workflows/x.yml", "evil")).exit
+      yield assertTrue(exit.isFailure)
+    }
   ).provideShared(layer)

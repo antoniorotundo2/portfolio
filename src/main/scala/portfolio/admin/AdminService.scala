@@ -14,55 +14,44 @@ trait AdminService:
   def sweepExpired: UIO[Unit]
 
 object AdminServiceLive:
+
+  /** Invio dell'OTP via email. Iniettabile per rendere il servizio testabile senza rete. */
+  type EmailSender = (String, String) => Task[Unit]
+
   val layer: ZLayer[Client, Nothing, AdminService] =
     ZLayer.fromZIO {
       for
         otpStore     <- Ref.make(Map.empty[String, OtpEntry])
         sessionStore <- Ref.make(Map.empty[String, AdminSession])
         client       <- ZIO.service[Client]
-      yield Live(otpStore, sessionStore, client)
+      yield Live(otpStore, sessionStore, resendSender(client))
     }
 
-  case class OtpEntry(code: String, expiresAt: Instant, attempts: Int)
+  /** Factory senza dipendenza dal Client: usata nei test con un sender finto. */
+  def make(sender: EmailSender): UIO[AdminService] =
+    for
+      otpStore     <- Ref.make(Map.empty[String, OtpEntry])
+      sessionStore <- Ref.make(Map.empty[String, AdminSession])
+    yield Live(otpStore, sessionStore, sender)
+
+  case class OtpEntry(code: String, expiresAt: Instant, issuedAt: Instant, attempts: Int)
   case class AdminSession(expiresAt: Instant)
 
   private case class ResendRequest(from: String, to: String, subject: String, text: String)
   private object ResendRequest:
     given JsonEncoder[ResendRequest] = DeriveJsonEncoder.gen[ResendRequest]
 
-  private final class Live(
-      otpStore: Ref[Map[String, OtpEntry]],
-      sessionStore: Ref[Map[String, AdminSession]],
-      client: Client
-  ) extends AdminService:
+  /** Implementazione reale del sender, basata su Resend. */
+  private def resendSender(client: Client): EmailSender = (email, otp) =>
+    val requestBody = ResendRequest(
+      from = AdminConfig.smtpFrom,
+      to = email,
+      subject = "Admin Code — Portfolio",
+      text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
+    )
 
-    private val random = new SecureRandom()
-
-    private def generateOtp(): String =
-      val bound = math.pow(10, AdminConfig.otpLength).toInt
-      String.format(s"%0${AdminConfig.otpLength}d", random.nextInt(bound))
-
-    /** Confronto a tempo costante per evitare timing attack sull'OTP. */
-    private def constantTimeEquals(a: String, b: String): Boolean =
-      java.security.MessageDigest.isEqual(
-        a.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-        b.getBytes(java.nio.charset.StandardCharsets.UTF_8)
-      )
-
-    private def generateToken(): String =
-      val bytes = new Array[Byte](32)
-      random.nextBytes(bytes)
-      bytes.map("%02x".format(_)).mkString
-
-    private def sendOtpEmail(email: String, otp: String): Task[Unit] =
-      val requestBody = ResendRequest(
-        from = AdminConfig.smtpFrom,
-        to = email,
-        subject = "Admin Code — Portfolio",
-        text = s"Your code is: $otp\nExpires in ${AdminConfig.otpExpiryMinutes} minutes."
-      )
-
-      ZIO.scoped {
+    ZIO
+      .scoped {
         client
           .batched(
             Request(
@@ -83,19 +72,57 @@ object AdminServiceLive:
               )
           }
       }
-        .timeoutFail(new RuntimeException("Resend timeout"))(30.seconds)
-        .catchAll(err => ZIO.logWarning(s"Email failed: ${err.getMessage}. OTP: $otp"))
+      .timeoutFail(new RuntimeException("Resend timeout"))(30.seconds)
+      // L'OTP non viene loggato: in caso di errore segnaliamo solo il fallimento.
+      .catchAll(err => ZIO.logWarning(s"Email failed: ${err.getMessage}"))
+
+  private final class Live(
+      otpStore: Ref[Map[String, OtpEntry]],
+      sessionStore: Ref[Map[String, AdminSession]],
+      sendEmail: EmailSender
+  ) extends AdminService:
+
+    private val random = new SecureRandom()
+
+    private def generateOtp(): String =
+      val bound = math.pow(10, AdminConfig.otpLength).toInt
+      String.format(s"%0${AdminConfig.otpLength}d", random.nextInt(bound))
+
+    /** Confronto a tempo costante per evitare timing attack sull'OTP. */
+    private def constantTimeEquals(a: String, b: String): Boolean =
+      java.security.MessageDigest.isEqual(
+        a.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+        b.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+      )
+
+    private def generateToken(): String =
+      val bytes = new Array[Byte](32)
+      random.nextBytes(bytes)
+      bytes.map("%02x".format(_)).mkString
 
     def requestOtp: Task[Unit] =
       val email = AdminConfig.adminEmail
-      val otp   = generateOtp()
-      val entry =
-        OtpEntry(otp, Instant.now().plusSeconds(AdminConfig.otpExpiryMinutes * 60L), attempts = 0)
-      for
-        _ <- otpStore.update(_.updated(email, entry))
-        _ <- sendOtpEmail(email, otp)
-        _ <- ZIO.logInfo(s"OTP generated for $email") // l'OTP non viene mai loggato
-      yield ()
+      val now   = Instant.now()
+      otpStore.get.flatMap { store =>
+        store.get(email) match
+          // Cooldown: se un OTP valido è stato emesso da poco, non ne generiamo/inviamo un altro
+          // (rate-limit anti spam email / quota Resend). L'OTP esistente resta valido.
+          case Some(entry)
+              if now.isBefore(entry.expiresAt) &&
+                now.isBefore(entry.issuedAt.plusSeconds(AdminConfig.otpResendCooldownSeconds)) =>
+            ZIO.logWarning(s"OTP request throttled for $email")
+          case _ =>
+            val otp = generateOtp()
+            val entry = OtpEntry(
+              code = otp,
+              expiresAt = now.plusSeconds(AdminConfig.otpExpiryMinutes * 60L),
+              issuedAt = now,
+              attempts = 0
+            )
+            otpStore.update(_.updated(email, entry)) *>
+              sendEmail(email, otp) *>
+              ZIO.logInfo(s"OTP generated for $email")
+      }
 
     def verifyOtp(code: String): Task[Option[String]] =
       val email = AdminConfig.adminEmail

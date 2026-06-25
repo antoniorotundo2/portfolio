@@ -188,6 +188,8 @@ object ProfileLoader:
   def load: Task[Profile] =
     ResourceLoader.loadParsed("/home/profile.md")(parseProfile)
 
+  def validate(raw: String): Boolean = parseProfile(raw).isDefined
+
   private def parseProfile(raw: String): Option[Profile] =
     val (fm, _) = MarkdownParser.parse(raw)
     for
@@ -250,6 +252,8 @@ object HomeLoader:
   def load: Task[HomeConfig] =
     ResourceLoader.loadParsed("/home/home.md")(parseHome)
 
+  def validate(raw: String): Boolean = parseHome(raw).isDefined
+
   private def parseHome(raw: String): Option[HomeConfig] =
     val (fm, _) = MarkdownParser.parse(raw)
     for
@@ -296,6 +300,8 @@ object LayoutLoader:
   def load: Task[LayoutConfig] =
     ResourceLoader.loadParsed("/layout/layout.md")(parseLayout)
 
+  def validate(raw: String): Boolean = parseLayout(raw).isDefined
+
   private def parseLayout(raw: String): Option[LayoutConfig] =
     val (fm, _) = MarkdownParser.parse(raw)
     for
@@ -325,6 +331,8 @@ object ProjectsLoader:
   def load: Task[ProjectsConfig] =
     ResourceLoader.loadParsed("/projects/projects.md")(parse)
 
+  def validate(raw: String): Boolean = parse(raw).isDefined
+
   private def parse(raw: String): Option[ProjectsConfig] =
     val (fm, _) = MarkdownParser.parse(raw)
     for
@@ -350,6 +358,8 @@ object BlogLoader:
 
   def load: Task[BlogConfig] =
     ResourceLoader.loadParsed("/blog/blog.md")(parse)
+
+  def validate(raw: String): Boolean = parse(raw).isDefined
 
   private def parse(raw: String): Option[BlogConfig] =
     val (fm, _) = MarkdownParser.parse(raw)
@@ -380,6 +390,8 @@ object NotFoundLoader:
   def load: Task[NotFoundConfig] =
     ResourceLoader.loadParsed("/notfound/notfound.md")(parse)
 
+  def validate(raw: String): Boolean = parse(raw).isDefined
+
   private def parse(raw: String): Option[NotFoundConfig] =
     val (fm, _) = MarkdownParser.parse(raw)
     for
@@ -389,6 +401,26 @@ object NotFoundLoader:
       errorSubtitle <- MarkdownParser.frontString(fm, "errorSubtitle")
       goHomeLabel   <- MarkdownParser.frontString(fm, "goHomeLabel")
     yield NotFoundConfig(pageTitle, errorCode, errorTitle, errorSubtitle, goHomeLabel)
+
+// ── Content validator (usato dall'admin prima del commit) ──────────────────────
+
+object ContentValidator:
+
+  /** Valida il contenuto di un file noto: rifiuta salvataggi che romperebbero il boot. I file di
+    * blog/progetti singoli non sono editabili dall'admin, quindi non serve validarli.
+    */
+  def validate(path: String, raw: String): Either[String, Unit] =
+    val ok = path match
+      case "home/profile.md"      => ProfileLoader.validate(raw)
+      case "home/home.md"         => HomeLoader.validate(raw)
+      case "layout/layout.md"     => LayoutLoader.validate(raw)
+      case "projects/projects.md" => ProjectsLoader.validate(raw)
+      case "blog/blog.md"         => BlogLoader.validate(raw)
+      case "notfound/notfound.md" => NotFoundLoader.validate(raw)
+      case _                      => true
+    if ok then Right(())
+    else
+      Left(s"Contenuto non valido per '$path': campi frontmatter obbligatori mancanti o malformati")
 
 // ── Live implementation ───────────────────────────────────────────────────────
 

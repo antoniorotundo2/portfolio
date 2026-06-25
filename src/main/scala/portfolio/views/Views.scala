@@ -45,8 +45,14 @@ object Icons:
 
 object Layout:
 
+  // Origin pubblico e immagine OG, configurabili via env (per canonical / Open Graph assoluti).
+  private val siteUrl: String = sys.env.getOrElse("SITE_URL", "").stripSuffix("/")
+  private val ogImage: String = sys.env.getOrElse("OG_IMAGE_URL", "")
+
   // Shared <head> block: include meta description + Open Graph/Twitter per SEO e condivisioni.
-  private def headBlock(pageTitle: String, description: String) =
+  private def headBlock(pageTitle: String, description: String, currentPath: String) =
+    val canonicalUrl =
+      if siteUrl.nonEmpty && currentPath.nonEmpty then Some(siteUrl + currentPath) else None
     head(
       meta(charset := "utf-8"),
       meta(name    := "viewport", content := "width=device-width, initial-scale=1"),
@@ -56,7 +62,12 @@ object Layout:
       meta(attr("property") := "og:description", content := description),
       meta(attr("property") := "og:type", content        := "website"),
       meta(name             := "twitter:card", content   := "summary"),
-      link(rel              := "preconnect", href        := "https://fonts.googleapis.com"),
+      canonicalUrl.map(u => link(rel := "canonical", href := u)).getOrElse(frag()),
+      canonicalUrl.map(u => meta(attr("property") := "og:url", content := u)).getOrElse(frag()),
+      Option
+        .when(ogImage.nonEmpty)(meta(attr("property") := "og:image", content := ogImage))
+        .getOrElse(frag()),
+      link(rel := "preconnect", href := "https://fonts.googleapis.com"),
       link(rel := "preconnect", href := "https://fonts.gstatic.com", attr("crossorigin") := ""),
       link(
         rel := "stylesheet",
@@ -102,7 +113,7 @@ object Layout:
       content: Modifier*
   ): String =
     "<!DOCTYPE html>" + html(lang := "en")(
-      headBlock(pageTitle, description),
+      headBlock(pageTitle, description, currentPath),
       body(
         navbar(layout, currentPath),
         main(cls := "site-main")(content*),

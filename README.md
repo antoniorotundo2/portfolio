@@ -56,8 +56,17 @@ Open [http://localhost:8080](http://localhost:8080)
 
 ```bash
 sbt assembly
-java -jar target/scala-3.4.2/portfolio-assembly-0.1.0.jar
+java -jar target/scala-3.3.7/portfolio-assembly-0.1.0.jar
 ```
+
+### Run tests / formatting
+
+```bash
+sbt test            # ZIO Test suites
+sbt scalafmtCheckAll # verifica formattazione (come in CI)
+```
+
+CI (GitHub Actions, `.github/workflows/ci.yml`) esegue `scalafmtCheckAll` e `test` su ogni push/PR verso `main`.
 
 ### Docker
 
@@ -66,6 +75,47 @@ sbt assembly
 docker build -t portfolio .
 docker run -p 8080:8080 portfolio
 ```
+
+## Environment variables
+
+L'app pubblica parte senza configurazione. Le variabili servono per l'area admin
+(salvataggio su GitHub + OTP via email) e per la SEO assoluta.
+
+**Admin (richieste per usare `/admin`):**
+
+| Variabile        | Default              | Descrizione                                  |
+|------------------|----------------------|----------------------------------------------|
+| `GITHUB_TOKEN`   | — (obbligatoria)     | Token con permesso di scrittura sul repo     |
+| `SMTP_PASSWORD`  | — (obbligatoria)     | API key Resend per l'invio dell'OTP          |
+| `ADMIN_EMAIL`    | `admin@example.com`  | Email che riceve il codice OTP               |
+| `GITHUB_OWNER`   | `your-username`      | Owner del repo dei contenuti                 |
+| `GITHUB_REPO`    | `portfolio`          | Nome del repo                                |
+| `GITHUB_BRANCH`  | `main`               | Branch su cui committare                     |
+| `CONTENT_BASE_PATH` | `src/main/resources` | Prefisso path dei contenuti nel repo      |
+| `SMTP_FROM`      | `onboarding@resend.dev` | Mittente dell'email OTP                   |
+
+**Sito / sicurezza (opzionali):**
+
+| Variabile      | Default | Descrizione                                                  |
+|----------------|---------|--------------------------------------------------------------|
+| `COOKIE_SECURE`| `true`  | Cookie di sessione solo su HTTPS (metti `false` in dev HTTP) |
+| `SITE_URL`     | —       | Origin pubblico per `canonical`/`og:url` (es. `https://...`) |
+| `OG_IMAGE_URL` | —       | URL assoluto dell'immagine Open Graph per le anteprime       |
+
+> Nota: `GITHUB_TOKEN`/`SMTP_PASSWORD` sono valutate in modo lazy — l'app pubblica e i
+> test girano senza, ma l'area admin fallisce in modo esplicito se mancano.
+
+## Endpoints
+
+| Path             | Descrizione                                  |
+|------------------|----------------------------------------------|
+| `/`              | Home                                         |
+| `/projects`      | Elenco progetti                              |
+| `/blog`, `/blog/:slug` | Blog e singolo articolo                |
+| `/api/projects`, `/api/posts` | API JSON                        |
+| `/healthz`       | Health check (per Render)                    |
+| `/robots.txt`, `/sitemap.xml` | SEO                             |
+| `/admin`         | Area amministratore (OTP + editor contenuti) |
 
 ## Extending the Project
 
@@ -93,13 +143,15 @@ Server.serve(Routes.routes)
 
 Add `flexmark-java` to `build.sbt` and convert `BlogPost.content` from Markdown to HTML in the service layer before passing to views.
 
-### Deploy to Fly.io
+### Deploy
 
-```bash
-fly launch --dockerfile Dockerfile
-fly deploy
-```
+Il progetto è pensato per il deploy via Docker (vedi `Dockerfile`). Su **Render**:
+crea un *Web Service* dal repo, usa il Dockerfile, imposta le variabili d'ambiente
+(vedi sopra) e configura l'health check su `/healthz`. Ogni push su `main` innesca un redeploy.
 
 ## Customise
 
-Edit `PortfolioServiceLive.scala` to update your profile, projects, and blog posts. All content lives in one file for simplicity.
+I contenuti sono **file Markdown con frontmatter YAML** in `src/main/resources/`
+(`home/`, `layout/`, `projects/`, `blog/`, `notfound/`), caricati all'avvio dai loader
+in `services/PortfolioService.scala`. Puoi modificarli direttamente nel repo oppure
+dall'area `/admin`, che committa su GitHub (con validazione del contenuto prima del commit).
