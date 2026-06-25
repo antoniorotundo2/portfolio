@@ -145,4 +145,6 @@ function backToRequest() {
 // Inizializza al caricamento
 document.addEventListener('DOMContentLoaded', () => {
   setupOtpInputs();
+  document.getElementById('btn-request-otp')?.addEventListener('click', requestOtp);
+  document.getElementById('btn-back')?.addEventListener('click', backToRequest);
 });

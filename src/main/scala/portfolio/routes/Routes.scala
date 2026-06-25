@@ -53,6 +53,19 @@ object AppRoutes:
           else
             Response(status = Status.Ok, headers = cacheHeaders, body = Body.fromArray(asset.bytes))
 
+  /** Ricostruisce l'origin pubblico dalla richiesta (gestendo il proxy TLS di Render). */
+  private def baseUrl(req: Request): String =
+    val proto = req.headers.get("X-Forwarded-Proto").getOrElse("https")
+    val host  = req.headers.get("Host").getOrElse("localhost:8080")
+    s"$proto://$host"
+
+  private def okText(content: String, mediaType: MediaType): Response =
+    Response(
+      status = Status.Ok,
+      headers = Headers(Header.ContentType(mediaType)),
+      body = Body.fromString(content)
+    )
+
   private def okHtml(content: String): Response =
     Response(
       status = Status.Ok,
@@ -72,7 +85,6 @@ object AppRoutes:
 
   val routes: Routes[PortfolioService, Nothing] =
     Routes(
-      // ── Static files ────────────────────────────────────────────────────────
       // ── Health check (leggero, per Render) ───────────────────────────────────
       Method.GET / "healthz" ->
         handler { (_: Request) =>
@@ -159,6 +171,43 @@ object AppRoutes:
             posts <- svc.getBlogPosts
           } yield Response.json(posts.toJson)
         },
+
+      // ── SEO: robots.txt ───────────────────────────────────────────────────────
+      Method.GET / "robots.txt" ->
+        handler { (req: Request) =>
+          val body =
+            s"""User-agent: *
+               |Allow: /
+               |Disallow: /admin
+               |Sitemap: ${baseUrl(req)}/sitemap.xml
+               |""".stripMargin
+          okText(body, MediaType.text.plain)
+        },
+
+      // ── SEO: sitemap.xml (pagine statiche + post del blog) ──────────────────────
+      Method.GET / "sitemap.xml" ->
+        handler { (req: Request) =>
+          ZIO.serviceWithZIO[PortfolioService] { svc =>
+            svc.getBlogPosts.map { posts =>
+              val base        = baseUrl(req)
+              val staticPaths = List("/", "/projects", "/blog")
+              val postPaths   = posts.map(p => s"/blog/${p.slug}")
+              val urls = (staticPaths ++ postPaths)
+                .map(p => s"  <url><loc>$base$p</loc></url>")
+                .mkString("\n")
+              val xml =
+                s"""<?xml version="1.0" encoding="UTF-8"?>
+                   |<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+                   |$urls
+                   |</urlset>""".stripMargin
+              okText(xml, MediaType.application.`xml`)
+            }
+          }
+        },
+
+      // ── favicon: 204 per evitare il render completo della 404 ───────────────────
+      Method.GET / "favicon.ico" ->
+        handler((_: Request) => Response(status = Status.NoContent)),
 
       // ── 404 Catch-all per qualsiasi path non matchato (DEVE essere l'ultima) ─
       Method.ANY / trailing ->

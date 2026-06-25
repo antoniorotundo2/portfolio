@@ -45,13 +45,19 @@ object Icons:
 
 object Layout:
 
-  // Shared <head> block
-  private def headBlock(pageTitle: String) =
+  // Shared <head> block: include meta description + Open Graph/Twitter per SEO e condivisioni.
+  private def headBlock(pageTitle: String, description: String) =
     head(
       meta(charset := "utf-8"),
       meta(name    := "viewport", content := "width=device-width, initial-scale=1"),
       tag("title")(pageTitle),
-      link(rel := "preconnect", href := "https://fonts.googleapis.com"),
+      meta(name             := "description", content    := description),
+      meta(attr("property") := "og:title", content       := pageTitle),
+      meta(attr("property") := "og:description", content := description),
+      meta(attr("property") := "og:type", content        := "website"),
+      meta(name             := "twitter:card", content   := "summary"),
+      link(rel              := "preconnect", href        := "https://fonts.googleapis.com"),
+      link(rel := "preconnect", href := "https://fonts.gstatic.com", attr("crossorigin") := ""),
       link(
         rel := "stylesheet",
         href := "https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap"
@@ -91,11 +97,12 @@ object Layout:
   def page(
       layout: LayoutConfig,
       pageTitle: String,
+      description: String,
       currentPath: String,
       content: Modifier*
   ): String =
     "<!DOCTYPE html>" + html(lang := "en")(
-      headBlock(pageTitle),
+      headBlock(pageTitle, description),
       body(
         navbar(layout, currentPath),
         main(cls := "site-main")(content*),
@@ -118,6 +125,7 @@ object HomeView:
     Layout.page(
       layout,
       home.pageTitle,
+      profile.bio,
       "/",
       // Hero
       section(cls := "hero")(
@@ -233,6 +241,7 @@ object ProjectsView:
     Layout.page(
       layout,
       cfg.pageTitle,
+      cfg.subtitle,
       "/projects",
       section(cls := "page-hero")(
         span(cls := "section-tag")(cfg.sectionTag),
@@ -267,6 +276,7 @@ object BlogView:
     Layout.page(
       layout,
       cfg.pageTitle,
+      cfg.subtitle,
       "/blog",
       section(cls := "page-hero")(
         span(cls := "section-tag")(cfg.sectionTag),
@@ -283,6 +293,7 @@ object BlogPostView:
     Layout.page(
       layout,
       s"${post.title}${cfg.pageTitleSuffix}",
+      post.excerpt,
       "/blog",
       article(cls := "post-full")(
         header(cls := "post-header")(
@@ -308,6 +319,7 @@ object NotFoundView:
     Layout.page(
       layout,
       cfg.pageTitle,
+      cfg.errorSubtitle,
       "",
       section(cls := "not-found")(
         span(cls := "nf-code")(cfg.errorCode),

@@ -81,7 +81,7 @@ async function saveFile() {
     }
     const d = await r.json();
     if (d.success) {
-      s.innerHTML = `OK: ${d.message}<br><small><a href="${d.commitUrl}" target="_blank" style="color:#00ff88">View commit</a> - ${d.rebuildNote}</small>`;
+      s.innerHTML = `OK: ${d.message}<br><small><a href="${d.commitUrl}" target="_blank" class="commit-link">View commit</a> - ${d.rebuildNote}</small>`;
       s.className = 'save-status success';
     } else {
       s.textContent = 'Error: ' + d.error;
@@ -165,4 +165,17 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Binding dei controlli via addEventListener (nessun onclick inline → CSP stretta).
+function bindControls() {
+  document.getElementById('btn-logout')?.addEventListener('click', logout);
+  document.getElementById('btn-save')?.addEventListener('click', saveFile);
+  document.getElementById('preview-btn')?.addEventListener('click', togglePreview);
+  document.querySelectorAll('.toolbar-btn[data-md-before]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      insertMarkdown(btn.dataset.mdBefore || '', btn.dataset.mdAfter || '');
+    });
+  });
+}
+
+bindControls();
 loadFiles();

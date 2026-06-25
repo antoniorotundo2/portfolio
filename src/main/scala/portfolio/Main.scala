@@ -24,8 +24,8 @@ object Main extends ZIOAppDefault:
       .unit
 
   // Header di sicurezza applicati a tutte le risposte.
-  // NOTA: la CSP usa 'unsafe-inline' perché le viste admin hanno handler onclick e stili inline;
-  // per una CSP stretta andrebbero spostati su addEventListener / file CSS esterni.
+  // CSP stretta: niente 'unsafe-inline'. Possibile perché gli handler sono su addEventListener
+  // e non ci sono più stili/script inline nell'HTML generato.
   private val securityHeaders: Middleware[Any] =
     Middleware.addHeaders(
       Headers(
@@ -36,9 +36,9 @@ object Main extends ZIOAppDefault:
         Header.Custom(
           "Content-Security-Policy",
           "default-src 'self'; img-src 'self' data:; " +
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+            "style-src 'self' https://fonts.googleapis.com; " +
             "font-src 'self' https://fonts.gstatic.com; " +
-            "script-src 'self' 'unsafe-inline'; connect-src 'self'; " +
+            "script-src 'self'; connect-src 'self'; " +
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         )
       )

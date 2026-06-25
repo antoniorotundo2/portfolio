@@ -4,6 +4,16 @@ import scalatags.Text.all.*
 
 object AdminViews:
 
+  // Pulsante della toolbar Markdown: la coppia before/after viaggia in data-attribute,
+  // così il binding avviene via addEventListener (nessun onclick inline → CSP stretta).
+  private def mdButton(before: String, after: String, titleText: String, labelText: String) =
+    button(
+      cls               := "toolbar-btn",
+      data("md-before") := before,
+      data("md-after")  := after,
+      title             := titleText
+    )(labelText)
+
   private val headBlock = head(
     meta(charset := "utf-8"),
     meta(name    := "viewport", content := "width=device-width, initial-scale=1"),
@@ -36,11 +46,11 @@ object AdminViews:
                   cls      := "admin-input"
                 )
               ),
-              button(cls := "btn btn-primary admin-btn", onclick := "requestOtp()")(
+              button(cls := "btn btn-primary admin-btn", id := "btn-request-otp")(
                 "Request OTP Code"
               )
             ),
-            div(id := "step-verify", display.none)(
+            div(id := "step-verify", cls := "hidden")(
               div(cls := "otp-sent-badge")(
                 "✓ Codice inviato a ",
                 AdminConfig.adminEmail
@@ -100,7 +110,7 @@ object AdminViews:
                   )
                 )
               ),
-              button(cls := "otp-back", onclick := "backToRequest()")(
+              button(cls := "otp-back", id := "btn-back")(
                 "← Torna indietro"
               )
             ),
@@ -122,7 +132,7 @@ object AdminViews:
             h1(cls := "admin-title")("[ Admin Dashboard ]"),
             div(cls := "admin-header-actions")(
               span(cls := s"admin-badge $badge")(text),
-              button(cls := "btn btn-ghost", onclick := "logout()")("Logout")
+              button(cls := "btn btn-ghost", id := "btn-logout")("Logout")
             )
           ),
           div(cls := "admin-layout")(
@@ -132,56 +142,31 @@ object AdminViews:
             ),
             div(cls := "admin-editor")(
               div(id := "editor-placeholder", cls := "editor-placeholder")("Select a file"),
-              div(id := "editor-container", display.none)(
+              div(id := "editor-container", cls := "hidden")(
                 div(cls := "editor-header")(
                   h2(id := "editor-filename", cls := "editor-filename")(""),
                   div(cls := "editor-actions")(
                     span(id := "save-status", cls := "save-status")(""),
-                    button(cls := "btn btn-primary", onclick := "saveFile()")("Save")
+                    button(cls := "btn btn-primary", id := "btn-save")("Save")
                   )
                 ),
                 div(cls := "editor-toolbar")(
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('**', '**')",
-                    title   := "Bold"
-                  )("B"),
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('*', '')",
-                    title   := "Italic"
-                  )("I"),
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('# ', '')",
-                    title   := "Heading"
-                  )("H"),
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('[', '](url)')",
-                    title   := "Link"
-                  )("🔗"),
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('`', '`')",
-                    title   := "Code"
-                  )("<>"),
-                  button(
-                    cls     := "toolbar-btn",
-                    onclick := "insertMarkdown('- ', '')",
-                    title   := "List"
-                  )("≡"),
+                  mdButton("**", "**", "Bold", "B"),
+                  mdButton("*", "", "Italic", "I"),
+                  mdButton("# ", "", "Heading", "H"),
+                  mdButton("[", "](url)", "Link", "🔗"),
+                  mdButton("`", "`", "Code", "<>"),
+                  mdButton("- ", "", "List", "≡"),
                   span(cls := "toolbar-separator"),
                   button(
-                    cls     := "toolbar-btn preview-toggle",
-                    id      := "preview-btn",
-                    onclick := "togglePreview()",
-                    title   := "Preview"
+                    cls   := "toolbar-btn preview-toggle",
+                    id    := "preview-btn",
+                    title := "Preview"
                   )("👁 Preview")
                 ),
                 div(cls := "editor-main")(
                   textarea(id := "editor-content", cls := "editor-textarea", spellcheck := "false"),
-                  div(id      := "editor-preview", cls := "editor-preview", display.none)
+                  div(id      := "editor-preview", cls := "editor-preview hidden")
                 )
               )
             )

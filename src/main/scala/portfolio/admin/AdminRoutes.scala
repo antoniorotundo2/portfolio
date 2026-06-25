@@ -45,6 +45,12 @@ object AdminRoutes:
 
   private val sessionCookiePath = Path.root / "admin"
 
+  // Pagine admin: HTML + no-store, così le pagine sensibili non restano in cache.
+  private val adminHtmlHeaders = Headers(
+    Header.ContentType(MediaType.text.html),
+    Header.Custom("Cache-Control", "no-store")
+  )
+
   private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
 
@@ -69,7 +75,7 @@ object AdminRoutes:
         Handler.fromFunction { (_: Request) =>
           Response(
             status = Status.Ok,
-            headers = Headers(Header.ContentType(MediaType.text.html)),
+            headers = adminHtmlHeaders,
             body = Body.fromString(AdminViews.loginPage)
           )
         },
@@ -88,7 +94,7 @@ object AdminRoutes:
                       cs.isWritable.map { writable =>
                         Response(
                           status = Status.Ok,
-                          headers = Headers(Header.ContentType(MediaType.text.html)),
+                          headers = adminHtmlHeaders,
                           body =
                             Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
                         )

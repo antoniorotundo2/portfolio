@@ -1,3 +1,14 @@
+/* Utility: nasconde un elemento (sostituisce gli stili inline → CSP stretta).
+   Senza !important così gli stati "visibili" impostati via JS (element.style) prevalgono. */
+.hidden {
+  display: none;
+}
+
+/* Link al commit nel save-status (sostituisce lo stile inline). */
+.commit-link {
+  color: #00ff88;
+}
+
 .admin-body {
   background: #0a0a0f;
   color: #e0e0e0;
