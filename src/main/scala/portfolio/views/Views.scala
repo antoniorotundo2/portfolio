@@ -237,7 +237,9 @@ object ProjectCard:
         a(href := u, cls := "card-link", target := "_blank", rel := "noopener")(githubLabel)
       ).toSeq ++
       proj.liveUrl.map(u =>
-        a(href := u, cls := "card-link card-link-live", target := "_blank", rel := "noopener")(liveLabel)
+        a(href := u, cls := "card-link card-link-live", target := "_blank", rel := "noopener")(
+          liveLabel
+        )
       ).toSeq
     article(cls := "project-card")(
       div(cls := "card-top")(
@@ -252,9 +254,20 @@ object ProjectCard:
 
 object ProjectDetailView:
   def render(layout: LayoutConfig, cfg: ProjectsConfig, proj: Project): String =
+    val headerLinks =
+      proj.githubUrl.map(u =>
+        a(href := u, cls := "btn btn-ghost", target := "_blank", rel := "noopener")(
+          cfg.githubLinkLabel
+        )
+      ).toSeq ++
+        proj.liveUrl.map(u =>
+          a(href := u, cls := "btn btn-primary", target := "_blank", rel := "noopener")(
+            cfg.liveLinkLabel
+          )
+        ).toSeq
     Layout.page(
       layout,
-      s"${proj.title}${cfg.pageTitleSuffix}",
+      proj.title,
       proj.description,
       "/projects",
       article(cls := "project-full")(
@@ -266,14 +279,7 @@ object ProjectDetailView:
           h1(cls := "post-heading")(proj.title),
           p(cls := "post-lead")(proj.description),
           div(cls := "card-tags")(proj.tags.map(t => span(cls := "tag")(t))*),
-          div(cls := "project-header-links")(
-            proj.githubUrl.map(u =>
-              a(href := u, cls := "btn btn-ghost", target := "_blank", rel := "noopener")(cfg.githubLinkLabel)
-            ).toSeq*,
-            proj.liveUrl.map(u =>
-              a(href := u, cls := "btn btn-primary", target := "_blank", rel := "noopener")(cfg.liveLinkLabel)
-            ).toSeq*
-          )
+          div(cls := "project-header-links")(headerLinks*)
         ),
         div(cls := "post-content project-content")(raw(proj.longDescription)),
         tag("footer")(cls := "post-footer")(
