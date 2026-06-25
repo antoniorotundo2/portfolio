@@ -29,17 +29,17 @@ object Icons:
     "website" ->
       """<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 1 0 20 14.5 14.5 0 0 1 0-20"/><path d="M2 12h20"/>
-      </svg>""",
+      </svg>"""
   )
 
   // Returns the SVG markup for the given icon key, falling back to a generic link icon
   def apply(name: String): scalatags.Text.all.Modifier =
-    raw(svgs.getOrElse(name.toLowerCase.trim,
+    raw(svgs.getOrElse(
+      name.toLowerCase.trim,
       """<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
       </svg>"""
     ))
-
 
 // ── Design tokens (injected via CSS variables defined in stylesheet) ──────────
 
@@ -49,14 +49,14 @@ object Layout:
   private def headBlock(pageTitle: String) =
     head(
       meta(charset := "utf-8"),
-      meta(name := "viewport", content := "width=device-width, initial-scale=1"),
+      meta(name    := "viewport", content := "width=device-width, initial-scale=1"),
       tag("title")(pageTitle),
       link(rel := "preconnect", href := "https://fonts.googleapis.com"),
       link(
-        rel  := "stylesheet",
-        href := "https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap",
+        rel := "stylesheet",
+        href := "https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap"
       ),
-      link(rel := "stylesheet", href := "/static/css/main.css"),
+      link(rel := "stylesheet", href := "/static/css/main.css")
     )
 
   // Navigation bar driven by LayoutConfig
@@ -65,15 +65,18 @@ object Layout:
       a(href := "/", cls := "nav-logo")(
         span(cls := "logo-bracket")("["),
         layout.logoText,
-        span(cls := "logo-bracket")("]"),
+        span(cls := "logo-bracket")("]")
       ),
       div(cls := "nav-links")(
         layout.navLinks.map { link =>
-          val activeClass = if link.path == currentPath || (link.path != "/" && currentPath.startsWith(link.path)) then " active" else ""
-          val ctaClass    = if link.isCta then " nav-cta" else ""
+          val activeClass =
+            if link.path == currentPath || (link.path != "/" && currentPath.startsWith(link.path))
+            then " active"
+            else ""
+          val ctaClass = if link.isCta then " nav-cta" else ""
           a(href := link.path, cls := s"nav-link$activeClass$ctaClass")(link.label)
         }*
-      ),
+      )
     )
 
   private def footer(layout: LayoutConfig) =
@@ -81,128 +84,166 @@ object Layout:
       div(cls := "footer-inner")(
         span(cls := "footer-copy")(layout.footerCopy),
         span(cls := "footer-sep")("//"),
-        span(cls := "footer-built")(layout.footerBuiltWith),
-      ),
+        span(cls := "footer-built")(layout.footerBuiltWith)
+      )
     )
 
-  def page(layout: LayoutConfig, pageTitle: String, currentPath: String, content: Modifier*): String =
+  def page(
+      layout: LayoutConfig,
+      pageTitle: String,
+      currentPath: String,
+      content: Modifier*
+  ): String =
     "<!DOCTYPE html>" + html(lang := "en")(
       headBlock(pageTitle),
       body(
         navbar(layout, currentPath),
         main(cls := "site-main")(content*),
         footer(layout),
-        script(src := "/static/js/main.js"),
-      ),
+        script(src := "/static/js/main.js")
+      )
     ).render
 
 // ── Home page ─────────────────────────────────────────────────────────────────
 
 object HomeView:
 
-  def render(layout: LayoutConfig, home: HomeConfig, profile: Profile, featuredProjects: List[Project], latestPosts: List[BlogPost]): String =
-    Layout.page(layout, home.pageTitle, "/",
+  def render(
+      layout: LayoutConfig,
+      home: HomeConfig,
+      profile: Profile,
+      featuredProjects: List[Project],
+      latestPosts: List[BlogPost]
+  ): String =
+    Layout.page(
+      layout,
+      home.pageTitle,
+      "/",
       // Hero
       section(cls := "hero")(
         div(cls := "hero-label")(home.heroLabel),
         h1(cls := "hero-name")(profile.name),
-        p(cls  := "hero-role")(
+        p(cls := "hero-role")(
           span(cls := "role-prefix")(home.rolePrefix),
-          profile.role,
+          profile.role
         ),
         p(cls := "hero-bio")(profile.bio),
         div(cls := "hero-actions")(
           a(href := "/projects", cls := "btn btn-primary")(home.heroCtaPrimary),
-          a(href := "/blog",     cls := "btn btn-ghost")(home.heroCtaSecondary),
+          a(href := "/blog", cls := "btn btn-ghost")(home.heroCtaSecondary)
         ),
         div(cls := "hero-stats")(
-          div(cls := "stat")(span(cls := "stat-num")(featuredProjects.length.toString), span(cls := "stat-label")("projects")),
-          div(cls := "stat")(span(cls := "stat-num")(latestPosts.length.toString),      span(cls := "stat-label")("articles")),
-          div(cls := "stat")(span(cls := "stat-num")(home.statYearsValue),              span(cls := "stat-label")(home.statYearsLabel)),
-        ),
+          div(cls := "stat")(
+            span(cls := "stat-num")(featuredProjects.length.toString),
+            span(cls := "stat-label")("projects")
+          ),
+          div(cls := "stat")(
+            span(cls := "stat-num")(latestPosts.length.toString),
+            span(cls := "stat-label")("articles")
+          ),
+          div(cls := "stat")(
+            span(cls := "stat-num")(home.statYearsValue),
+            span(cls := "stat-label")(home.statYearsLabel)
+          )
+        )
       ),
 
       // Skills
       section(cls := "skills-section")(
         div(cls := "section-header")(
-          span(cls := "section-tag")(home.sectionSkills),
+          span(cls := "section-tag")(home.sectionSkills)
         ),
         div(cls := "skills-grid")(
           profile.skills.map(skill => span(cls := "skill-tag")(skill))*
-        ),
+        )
       ),
 
       // Featured projects
       section(cls := "featured-section")(
         div(cls := "section-header")(
           span(cls := "section-tag")(home.sectionProjects),
-          a(href := "/projects", cls := "see-all")(home.seeAllLabel),
+          a(href := "/projects", cls := "see-all")(home.seeAllLabel)
         ),
         div(cls := "projects-grid")(
-          featuredProjects.take(home.featuredProjectsCount).map(proj => ProjectCard.mini(proj, home.githubLinkLabel, home.liveLinkLabel))*
-        ),
+          featuredProjects.take(home.featuredProjectsCount).map(proj =>
+            ProjectCard.mini(proj, home.githubLinkLabel, home.liveLinkLabel)
+          )*
+        )
       ),
 
       // Latest posts
       section(cls := "posts-section")(
         div(cls := "section-header")(
           span(cls := "section-tag")(home.sectionPosts),
-          a(href := "/blog", cls := "see-all")(home.seeAllLabel),
+          a(href := "/blog", cls := "see-all")(home.seeAllLabel)
         ),
         div(cls := "posts-list")(
           latestPosts.take(home.latestPostsCount).map(post => BlogCard.mini(post, home.readSuffix))*
-        ),
+        )
       ),
 
       // Contact
       section(cls := "contact-section", id := "contact")(
         span(cls := "section-tag")(home.sectionContact),
         h2(cls := "contact-title")(home.contactTitle),
-        p(cls  := "contact-sub")(home.contactSubtitle),
+        p(cls := "contact-sub")(home.contactSubtitle),
         a(href := s"mailto:${profile.email}", cls := "btn btn-primary btn-lg")(
-          profile.email,
+          profile.email
         ),
         div(cls := "social-links")(
           profile.socials.map(s =>
-            a(href := s.url, cls := "social-link", target := "_blank", rel := "noopener", attr("aria-label") := s.label)(
+            a(
+              href               := s.url,
+              cls                := "social-link",
+              target             := "_blank",
+              rel                := "noopener",
+              attr("aria-label") := s.label
+            )(
               Icons(s.icon),
-              span(cls := "social-label")(s.label),
+              span(cls := "social-label")(s.label)
             )
           )*
-        ),
-      ),
+        )
+      )
     )
 
 // ── Projects ──────────────────────────────────────────────────────────────────
 
 object ProjectCard:
   def mini(proj: Project, githubLabel: String, liveLabel: String) =
-    val links = proj.githubUrl.map(u => a(href := u, cls := "card-link", target := "_blank")(githubLabel)).toSeq ++
-                proj.liveUrl.map(u  => a(href := u, cls := "card-link card-link-live", target := "_blank")(liveLabel)).toSeq
+    val links = proj.githubUrl.map(u =>
+      a(href := u, cls := "card-link", target := "_blank")(githubLabel)
+    ).toSeq ++
+      proj.liveUrl.map(u =>
+        a(href := u, cls := "card-link card-link-live", target := "_blank")(liveLabel)
+      ).toSeq
     article(cls := "project-card")(
       div(cls := "card-top")(
         span(cls := s"status-dot status-${proj.status.toString.toLowerCase}"),
-        span(cls := "card-year")(proj.year.toString),
+        span(cls := "card-year")(proj.year.toString)
       ),
       h3(cls := "card-title")(proj.title),
-      p(cls  := "card-desc")(proj.description),
+      p(cls := "card-desc")(proj.description),
       div(cls := "card-tags")(proj.tags.map(t => span(cls := "tag")(t))*),
-      div(cls := "card-links")(links*),
+      div(cls := "card-links")(links*)
     )
 
 object ProjectsView:
   def render(layout: LayoutConfig, cfg: ProjectsConfig, projects: List[Project]): String =
-    Layout.page(layout, cfg.pageTitle, "/projects",
+    Layout.page(
+      layout,
+      cfg.pageTitle,
+      "/projects",
       section(cls := "page-hero")(
         span(cls := "section-tag")(cfg.sectionTag),
         h1(cls := "page-title")(cfg.heading),
-        p(cls  := "page-subtitle")(cfg.subtitle),
+        p(cls := "page-subtitle")(cfg.subtitle)
       ),
       section(cls := "projects-full")(
         div(cls := "projects-grid projects-grid-full")(
           projects.map(proj => ProjectCard.mini(proj, cfg.githubLinkLabel, cfg.liveLinkLabel))*
-        ),
-      ),
+        )
+      )
     )
 
 // ── Blog ─────────────────────────────────────────────────────────────────────
@@ -212,57 +253,66 @@ object BlogCard:
     article(cls := "post-row")(
       div(cls := "post-meta")(
         time(cls := "post-date")(post.publishedAt),
-        span(cls := "post-read")(s"${post.readingMinutes} ${readSuffix}"),
+        span(cls := "post-read")(s"${post.readingMinutes} ${readSuffix}")
       ),
       div(cls := "post-body")(
         a(href := s"/blog/${post.slug}", cls := "post-title")(post.title),
-        p(cls  := "post-excerpt")(post.excerpt),
-        div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*),
-      ),
+        p(cls := "post-excerpt")(post.excerpt),
+        div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*)
+      )
     )
 
 object BlogView:
   def render(layout: LayoutConfig, cfg: BlogConfig, posts: List[BlogPost]): String =
-    Layout.page(layout, cfg.pageTitle, "/blog",
+    Layout.page(
+      layout,
+      cfg.pageTitle,
+      "/blog",
       section(cls := "page-hero")(
         span(cls := "section-tag")(cfg.sectionTag),
         h1(cls := "page-title")(cfg.heading),
-        p(cls  := "page-subtitle")(cfg.subtitle),
+        p(cls := "page-subtitle")(cfg.subtitle)
       ),
       section(cls := "blog-list")(
         posts.map(post => BlogCard.mini(post, cfg.readSuffix))*
-      ),
+      )
     )
 
 object BlogPostView:
   def render(layout: LayoutConfig, cfg: BlogConfig, post: BlogPost): String =
-    Layout.page(layout, s"${post.title}${cfg.pageTitleSuffix}", "/blog",
+    Layout.page(
+      layout,
+      s"${post.title}${cfg.pageTitleSuffix}",
+      "/blog",
       article(cls := "post-full")(
         header(cls := "post-header")(
           div(cls := "post-meta")(
             time(cls := "post-date")(post.publishedAt),
-            span(cls := "post-read")(s"${post.readingMinutes} ${cfg.readSuffixFull}"),
+            span(cls := "post-read")(s"${post.readingMinutes} ${cfg.readSuffixFull}")
           ),
           h1(cls := "post-heading")(post.title),
-          p(cls  := "post-lead")(post.excerpt),
-          div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*),
+          p(cls := "post-lead")(post.excerpt),
+          div(cls := "post-tags")(post.tags.map(t => span(cls := "tag")(t))*)
         ),
         div(cls := "post-content")(raw(post.content)),
         tag("footer")(cls := "post-footer")(
-          a(href := "/blog", cls := "back-link")(cfg.backLabel),
-        ),
-      ),
+          a(href := "/blog", cls := "back-link")(cfg.backLabel)
+        )
+      )
     )
 
 // ── 404 ───────────────────────────────────────────────────────────────────────
 
 object NotFoundView:
   def render(layout: LayoutConfig, cfg: NotFoundConfig): String =
-    Layout.page(layout, cfg.pageTitle, "",
+    Layout.page(
+      layout,
+      cfg.pageTitle,
+      "",
       section(cls := "not-found")(
         span(cls := "nf-code")(cfg.errorCode),
         h1(cls := "nf-title")(cfg.errorTitle),
-        p(cls  := "nf-sub")(cfg.errorSubtitle),
-        a(href := "/", cls := "btn btn-primary")(cfg.goHomeLabel),
-      ),
+        p(cls := "nf-sub")(cfg.errorSubtitle),
+        a(href := "/", cls := "btn btn-primary")(cfg.goHomeLabel)
+      )
     )

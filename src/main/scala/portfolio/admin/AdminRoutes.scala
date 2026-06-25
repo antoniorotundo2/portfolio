@@ -38,7 +38,12 @@ object AdminRoutes:
     Response.json(encoder.encodeJson(value, None).toString)
 
   private val notAuthenticated: Response =
-    Response(status = Status.Unauthorized, body = Body.fromString("""{"error":"Not authenticated"}"""))
+    Response(
+      status = Status.Unauthorized,
+      body = Body.fromString("""{"error":"Not authenticated"}""")
+    )
+
+  private val sessionCookiePath = Path.root / "admin"
 
   private def checkAuth(adminSvc: AdminService, req: Request): UIO[Boolean] =
     adminSvc.isAuthenticated(extractToken(req).getOrElse(""))
@@ -49,31 +54,29 @@ object AdminRoutes:
   private def decodeOtpRequest(body: String): Either[String, OtpRequest] =
     summon[JsonDecoder[OtpRequest]].decodeJson(body)
 
-  private def toUIO(task: Task[Response]): UIO[Response] =
-    task.catchAll(err => ZIO.succeed(Response.internalServerError(err.getMessage)))
+  /** Logga l'errore reale ma restituisce al client un messaggio generico (no info disclosure). */
+  private def toUIO[R](effect: ZIO[R, Throwable, Response]): URIO[R, Response] =
+    effect.catchAllCause { cause =>
+      ZIO.logErrorCause("Admin request failed", cause) *>
+        ZIO.succeed(
+          Response.json("""{"error":"Internal error"}""").status(Status.InternalServerError)
+        )
+    }
 
-  val routes: ZIO[AdminService & ContentService & PortfolioService & Client, Nothing, Routes[Any, Nothing]] =
-    for
-      adminSvc   <- ZIO.service[AdminService]
-      contentSvc <- ZIO.service[ContentService]
-      portfolio  <- ZIO.service[PortfolioService]
-      client     <- ZIO.service[Client]
-      adminLayer   = ZLayer.succeed(adminSvc)
-      contentLayer = ZLayer.succeed(contentSvc)
-      portLayer    = ZLayer.succeed(portfolio)
-      clientLayer  = ZLayer.succeed(client)
-    yield Routes(
-
+  val routes: Routes[AdminService & ContentService & PortfolioService, Nothing] =
+    Routes(
       Method.GET / "admin" ->
         Handler.fromFunction { (_: Request) =>
-          Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)),
-            body = Body.fromString(AdminViews.loginPage))
+          Response(
+            status = Status.Ok,
+            headers = Headers(Header.ContentType(MediaType.text.html)),
+            body = Body.fromString(AdminViews.loginPage)
+          )
         },
-
       Method.GET / "admin" / "dashboard" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
-            (for {
+            for {
               as <- ZIO.service[AdminService]
               cs <- ZIO.service[ContentService]
               result <- extractToken(req) match {
@@ -83,50 +86,57 @@ object AdminRoutes:
                     case false => ZIO.succeed(Response.redirect(URL.root / "admin"))
                     case true =>
                       cs.isWritable.map { writable =>
-                        Response(status = Status.Ok, headers = Headers(Header.ContentType(MediaType.text.html)),
-                          body = Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true)))
+                        Response(
+                          status = Status.Ok,
+                          headers = Headers(Header.ContentType(MediaType.text.html)),
+                          body =
+                            Body.fromString(AdminViews.dashboardPage(writable, isGitHubMode = true))
+                        )
                       }
                   }
               }
-            } yield result).provide(adminLayer ++ contentLayer)
+            } yield result
           }
         },
-
       Method.POST / "admin" / "api" / "request-otp" ->
         Handler.fromFunctionZIO { (_: Request) =>
           toUIO {
             ZIO.serviceWithZIO[AdminService](_.requestOtp)
-              .map {
-                case Some(_) => Response.json("""{"message":"OTP sent"}""")
-                case None    => Response.json("""{"error":"OTP generation error"}""").status(Status.InternalServerError)
-              }
-              .provide(adminLayer)
+              .as(Response.json("""{"message":"OTP sent"}"""))
           }
         },
-
       Method.POST / "admin" / "api" / "verify-otp" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
-            (for {
+            for {
               as <- ZIO.service[AdminService]
               result <- req.body.asString.flatMap { rawBody =>
                 decodeOtpRequest(rawBody) match {
-                  case Left(_) => ZIO.succeed(Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest))
+                  case Left(_) => ZIO.succeed(
+                      Response.json("""{"error":"Missing 'otp' field"}""").status(Status.BadRequest)
+                    )
                   case Right(otpReq) =>
                     as.verifyOtp(otpReq.otp).flatMap {
-                      case None => ZIO.succeed(Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized))
+                      case None => ZIO.succeed(
+                          Response.json("""{"error":"Invalid code"}""").status(Status.Unauthorized)
+                        )
                       case Some(token) =>
-                        val cookie = Cookie.Response(name = "admin_session", content = token,
+                        val cookie = Cookie.Response(
+                          name = "admin_session",
+                          content = token,
                           maxAge = Some(java.time.Duration.ofHours(AdminConfig.sessionExpiryHours)),
-                          isHttpOnly = true, sameSite = Some(Cookie.SameSite.Strict), path = Some(Path.root / "admin"))
+                          isHttpOnly = true,
+                          isSecure = AdminConfig.cookieSecure,
+                          sameSite = Some(Cookie.SameSite.Strict),
+                          path = Some(sessionCookiePath)
+                        )
                         ZIO.succeed(Response.json("""{"success":true}""").addCookie(cookie))
                     }
                 }
               }
-            } yield result).provide(adminLayer)
+            } yield result
           }
         },
-
       Method.POST / "admin" / "api" / "logout" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
@@ -135,10 +145,18 @@ object AdminRoutes:
                 case None => ZIO.succeed(Response.redirect(URL.root / "admin"))
                 case Some(token) =>
                   as.logout(token).as(Response.json("""{"success":true}""").addCookie(
-                    Cookie.Response(name = "admin_session", content = "",
-                      maxAge = Some(java.time.Duration.ZERO), path = Some(Path.root / "admin"))))
+                    Cookie.Response(
+                      name = "admin_session",
+                      content = "",
+                      maxAge = Some(java.time.Duration.ZERO),
+                      isHttpOnly = true,
+                      isSecure = AdminConfig.cookieSecure,
+                      sameSite = Some(Cookie.SameSite.Strict),
+                      path = Some(sessionCookiePath)
+                    )
+                  ))
               }
-            }.provide(adminLayer)
+            }
           }
         },
 
@@ -146,7 +164,7 @@ object AdminRoutes:
       Method.GET / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
-            (for {
+            for {
               as <- ZIO.service[AdminService]
               cs <- ZIO.service[ContentService]
               result <- checkAuth(as, req).flatMap {
@@ -154,9 +172,9 @@ object AdminRoutes:
                 case true =>
                   cs.listFiles.map { files =>
                     jsonResponse(FilesListResponse(files, writable = true, isGitHubMode = true))
-                  }.catchAll(_ => ZIO.succeed(Response.json("""{"error":"Cannot list files"}""").status(Status.InternalServerError)))
+                  }
               }
-            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
+            } yield result
           }
         },
 
@@ -164,7 +182,7 @@ object AdminRoutes:
       Method.GET / "admin" / "api" / "files" / "get" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
-            (for {
+            for {
               as <- ZIO.service[AdminService]
               cs <- ZIO.service[ContentService]
               filename = req.url.queryParams.getAll("filename").headOption.getOrElse("")
@@ -172,11 +190,15 @@ object AdminRoutes:
                 case false => ZIO.succeed(notAuthenticated)
                 case true =>
                   ZIO.logInfo(s"Lettura file: $filename") *>
-                  cs.readFile(filename).flatMap(content =>
-                    ZIO.succeed(jsonResponse(FileContentResponse(filename, content)))
-                  ).catchAll(_ => ZIO.succeed(Response.json(s"""{"error":"Not found"}""").status(Status.NotFound)))
+                    cs.readFile(filename)
+                      .map(content => jsonResponse(FileContentResponse(filename, content)))
+                      .catchAll(_ =>
+                        ZIO.succeed(
+                          Response.json("""{"error":"Not found"}""").status(Status.NotFound)
+                        )
+                      )
               }
-            } yield result).provide(adminLayer ++ contentLayer ++ clientLayer)
+            } yield result
           }
         },
 
@@ -184,7 +206,7 @@ object AdminRoutes:
       Method.POST / "admin" / "api" / "files" ->
         Handler.fromFunctionZIO { (req: Request) =>
           toUIO {
-            (for {
+            for {
               as <- ZIO.service[AdminService]
               cs <- ZIO.service[ContentService]
               ps <- ZIO.service[PortfolioService]
@@ -192,25 +214,28 @@ object AdminRoutes:
                 case false => ZIO.succeed(notAuthenticated)
                 case true =>
                   req.body.asString.flatMap { body =>
-                    ZIO.logInfo(s"Body ricevuto: ${body.take(200)}") *>
-                    ZIO.fromEither(decodeSaveRequest(body)).flatMap { saveReq =>
-                      ZIO.logInfo(s"Salvo file: ${saveReq.path}") *>
-                      cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
-                        ps.reload.catchAll(_ => ZIO.unit) *>
-                          ZIO.succeed(jsonResponse(SaveResponse(
-                            success = true,
-                            message = "File saved to GitHub!",
-                            commitUrl = commit.html_url,
-                            rebuildNote = "The site will update automatically on Render in ~1-2 minutes."
-                          )))
-                      }
-                    }.catchAll { parseErr =>
-                      ZIO.logError(s"Parse error: ${parseErr}") *>
-                      ZIO.succeed(Response.json(s"""{"error":"Invalid JSON: ${parseErr}"}""").status(Status.BadRequest))
+                    decodeSaveRequest(body) match {
+                      case Left(_) =>
+                        ZIO.logWarning("Save request: invalid JSON body") *>
+                          ZIO.succeed(Response.json("""{"error":"Invalid request body"}""").status(
+                            Status.BadRequest
+                          ))
+                      case Right(saveReq) =>
+                        ZIO.logInfo(s"Salvo file: ${saveReq.path}") *>
+                          cs.writeFile(saveReq.path, saveReq.content).flatMap { commit =>
+                            ps.reload.catchAll(_ => ZIO.unit) *>
+                              ZIO.succeed(jsonResponse(SaveResponse(
+                                success = true,
+                                message = "File saved to GitHub!",
+                                commitUrl = commit.html_url,
+                                rebuildNote =
+                                  "The site will update automatically on Render in ~1-2 minutes."
+                              )))
+                          }
                     }
                   }
               }
-            } yield result).provide(adminLayer ++ contentLayer ++ portLayer ++ clientLayer)
+            } yield result
           }
         }
     )

@@ -8,50 +8,52 @@ import zio.http.*
 
 object AppRoutes:
 
+  // Nomi file statici consentiti: blocca path traversal (es. "../") nel segmento.
+  private val safeFileName = "^[A-Za-z0-9._-]+$".r
+
+  private def serveStatic(dir: String, file: String, contentType: Header.ContentType): Response =
+    if safeFileName.matches(file) then
+      val stream = getClass.getResourceAsStream(s"/static/$dir/$file")
+      if stream == null then Response.notFound
+      else
+        Response(
+          status = Status.Ok,
+          headers = Headers(contentType),
+          body = Body.fromArray(stream.readAllBytes())
+        )
+    else Response.notFound
+
   private def okHtml(content: String): Response =
     Response(
-      status  = Status.Ok,
+      status = Status.Ok,
       headers = Headers(Header.ContentType(MediaType.text.html)),
-      body    = Body.fromString(content),
+      body = Body.fromString(content)
     )
 
-  private def notFoundHtml(layout: portfolio.models.LayoutConfig, nf: portfolio.models.NotFoundConfig): Response =
+  private def notFoundHtml(
+      layout: portfolio.models.LayoutConfig,
+      nf: portfolio.models.NotFoundConfig
+  ): Response =
     Response(
-      status  = Status.NotFound,
+      status = Status.NotFound,
       headers = Headers(Header.ContentType(MediaType.text.html)),
-      body    = Body.fromString(NotFoundView.render(layout, nf)),
+      body = Body.fromString(NotFoundView.render(layout, nf))
     )
 
   val routes: Routes[PortfolioService, Nothing] =
     Routes(
-
       // ── Static files ────────────────────────────────────────────────────────
       Method.GET / "static" / "css" / string("file") ->
         handler { (file: String, _: Request) =>
-          ZIO.attemptBlocking {
-            val stream = getClass.getResourceAsStream(s"/static/css/$file")
-            if stream == null then Response.notFound
-            else
-              Response(
-                status  = Status.Ok,
-                headers = Headers(Header.ContentType(MediaType.text.css)),
-                body    = Body.fromArray(stream.readAllBytes()),
-              )
-          }.orDie
+          ZIO.attemptBlocking(serveStatic("css", file, Header.ContentType(MediaType.text.css))).orDie
         },
-
       Method.GET / "static" / "js" / string("file") ->
         handler { (file: String, _: Request) =>
-          ZIO.attemptBlocking {
-            val stream = getClass.getResourceAsStream(s"/static/js/$file")
-            if stream == null then Response.notFound
-            else
-              Response(
-                status  = Status.Ok,
-                headers = Headers(Header.ContentType(MediaType.application.`javascript`)),
-                body    = Body.fromArray(stream.readAllBytes()),
-              )
-          }.orDie
+          ZIO.attemptBlocking(serveStatic(
+            "js",
+            file,
+            Header.ContentType(MediaType.application.`javascript`)
+          )).orDie
         },
 
       // ── Home ────────────────────────────────────────────────────────────────
@@ -98,7 +100,9 @@ object AppRoutes:
             cfg    <- svc.getBlogConfig
             nf     <- svc.getNotFoundConfig
             post   <- svc.getBlogPost(slug)
-          } yield post.fold(notFoundHtml(layout, nf))(p => okHtml(BlogPostView.render(layout, cfg, p)))
+          } yield post.fold(notFoundHtml(layout, nf))(p =>
+            okHtml(BlogPostView.render(layout, cfg, p))
+          )
         },
 
       // ── JSON API ─────────────────────────────────────────────────────────────
@@ -110,7 +114,6 @@ object AppRoutes:
             projects <- svc.getProjects
           } yield Response.json(projects.toJson)
         },
-
       Method.GET / "api" / "posts" ->
         handler { (_: Request) =>
           import zio.json.*
@@ -128,5 +131,5 @@ object AppRoutes:
               notFoundHtml(layout, nf)
             }
           }
-        },
+        }
     )

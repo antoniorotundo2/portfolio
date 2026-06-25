@@ -6,7 +6,12 @@ import zio.json.*
 import java.time.Instant
 import java.util.Base64
 
-case class GitHubFileResponse(sha: String, content: Option[String], encoding: Option[String], download_url: Option[String])
+case class GitHubFileResponse(
+    sha: String,
+    content: Option[String],
+    encoding: Option[String],
+    download_url: Option[String]
+)
 object GitHubFileResponse:
   given JsonDecoder[GitHubFileResponse] = DeriveJsonDecoder.gen[GitHubFileResponse]
 
@@ -14,7 +19,14 @@ case class GitHubAuthor(name: String, email: String, date: String = Instant.now(
 object GitHubAuthor:
   given JsonEncoder[GitHubAuthor] = DeriveJsonEncoder.gen[GitHubAuthor]
 
-case class GitHubCreateUpdateRequest(message: String, content: String, sha: Option[String], branch: String, author: Option[GitHubAuthor] = None, committer: Option[GitHubAuthor] = None)
+case class GitHubCreateUpdateRequest(
+    message: String,
+    content: String,
+    sha: Option[String],
+    branch: String,
+    author: Option[GitHubAuthor] = None,
+    committer: Option[GitHubAuthor] = None
+)
 object GitHubCreateUpdateRequest:
   given JsonEncoder[GitHubCreateUpdateRequest] = DeriveJsonEncoder.gen[GitHubCreateUpdateRequest]
 
@@ -27,13 +39,13 @@ object GitHubCommitResponse:
   given JsonDecoder[GitHubCommitResponse] = DeriveJsonDecoder.gen[GitHubCommitResponse]
 
 trait GitHubService:
-  def getFileContent(path: String): ZIO[Client, Throwable, String]
-  def updateFile(path: String, content: String, commitMessage: String): ZIO[Client, Throwable, GitHubCommitResult]
+  def getFileContent(path: String): Task[String]
+  def updateFile(path: String, content: String, commitMessage: String): Task[GitHubCommitResult]
 
 object GitHubServiceLive:
-  val layer: ZLayer[Any, Nothing, GitHubService] = ZLayer.succeed(Live())
+  val layer: ZLayer[Client, Nothing, GitHubService] = ZLayer.fromFunction(Live.apply)
 
-  private final class Live extends GitHubService:
+  private final class Live(client: Client) extends GitHubService:
     private val baseUrl = "https://api.github.com"
     private val apiHeaders = Headers(
       Header.ContentType(MediaType.application.json),
@@ -51,16 +63,16 @@ object GitHubServiceLive:
     private def decodeBase64(s: String): String =
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
-    private def safeRequest(req: Request): ZIO[Client, Throwable, Response] =
-      ZIO.scoped(ZIO.serviceWithZIO[Client](_.batched(req)))
+    private def safeRequest(req: Request): Task[Response] =
+      ZIO.scoped(client.batched(req))
 
     private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
       body.fromJson[GitHubFileResponse]
         .left.map(err => new RuntimeException(s"JSON decode failed: $err"))
 
-    def getFileContent(path: String): ZIO[Client, Throwable, String] =
+    def getFileContent(path: String): Task[String] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
-      val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
+      val url      = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
 
       safeRequest(Request.get(url).addHeaders(apiHeaders))
         .flatMap { response =>
@@ -84,11 +96,11 @@ object GitHubServiceLive:
               }
         }
 
-    def updateFile(path: String, content: String, commitMessage: String): ZIO[Client, Throwable, GitHubCommitResult] =
+    def updateFile(path: String, content: String, commitMessage: String): Task[GitHubCommitResult] =
       val fullPath = s"${AdminConfig.contentBasePath}/$path"
-      val url = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
+      val url      = s"$baseUrl${apiPath(s"/contents/$fullPath")}"
 
-      val getSha: ZIO[Client, Throwable, Option[String]] =
+      val getSha: Task[Option[String]] =
         safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders))
           .flatMap { resp =>
             if resp.status == Status.NotFound then ZIO.succeed(None)
@@ -96,7 +108,7 @@ object GitHubServiceLive:
               resp.body.asString.flatMap { body =>
                 parseGitHubFileResponse(body) match
                   case Right(fileResp) => ZIO.succeed(Some(fileResp.sha))
-                  case Left(err) => ZIO.fail(err)
+                  case Left(err)       => ZIO.fail(err)
               }
             else ZIO.fail(new RuntimeException(s"GitHub API error: ${resp.status}"))
           }
@@ -110,12 +122,17 @@ object GitHubServiceLive:
           sha = existingSha,
           branch = AdminConfig.githubBranch,
           author = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail)),
-          committer = Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail))
+          committer =
+            Some(GitHubAuthor(AdminConfig.commitAuthorName, AdminConfig.commitAuthorEmail))
         )
-        requestJson = summon[JsonEncoder[GitHubCreateUpdateRequest]].encodeJson(request, None).toString
-        response <- safeRequest(Request.put(url, Body.fromString(requestJson)).addHeaders(apiHeaders))
+        requestJson =
+          summon[JsonEncoder[GitHubCreateUpdateRequest]].encodeJson(request, None).toString
+        response <-
+          safeRequest(Request.put(url, Body.fromString(requestJson)).addHeaders(apiHeaders))
         _ <- ZIO.unless(response.status.isSuccess)(
-          response.body.asString.flatMap(b => ZIO.fail(new RuntimeException(s"Commit failed [${response.status}]: $b")))
+          response.body.asString.flatMap(b =>
+            ZIO.fail(new RuntimeException(s"Commit failed [${response.status}]: $b"))
+          )
         )
         resultBody <- response.body.asString
         commitResp <- ZIO.fromEither(
