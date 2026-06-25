@@ -53,10 +53,11 @@ lazy val root = (project in file("."))
     ),
     Compile / mainClass := Some("portfolio.Main"),
     assembly / assemblyMergeStrategy := {
-      case PathList("META-INF", "services", _*) => MergeStrategy.concat
-      case PathList("META-INF", _*)             => MergeStrategy.discard
-      case "reference.conf"                     => MergeStrategy.concat
-      case _                                    => MergeStrategy.first
+      case PathList("META-INF", "services", _*)       => MergeStrategy.concat
+      case PathList("META-INF", _*)                   => MergeStrategy.discard
+      case "reference.conf"                           => MergeStrategy.concat
+      case name if name.endsWith(".DS_Store")         => MergeStrategy.discard
+      case _                                          => MergeStrategy.first
     },
   )
 

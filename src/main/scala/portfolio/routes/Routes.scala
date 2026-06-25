@@ -11,17 +11,47 @@ object AppRoutes:
   // Nomi file statici consentiti: blocca path traversal (es. "../") nel segmento.
   private val safeFileName = "^[A-Za-z0-9._-]+$".r
 
-  private def serveStatic(dir: String, file: String, contentType: Header.ContentType): Response =
-    if safeFileName.matches(file) then
-      val stream = getClass.getResourceAsStream(s"/static/$dir/$file")
-      if stream == null then Response.notFound
-      else
-        Response(
-          status = Status.Ok,
-          headers = Headers(contentType),
-          body = Body.fromArray(stream.readAllBytes())
-        )
-    else Response.notFound
+  /** Asset statico in memoria con ETag precalcolato. */
+  private final case class CachedAsset(bytes: Array[Byte], etag: String)
+
+  // Cache in-memory degli asset: evita di rileggere il classpath ad ogni richiesta.
+  private val staticCache = scala.collection.concurrent.TrieMap.empty[String, Option[CachedAsset]]
+
+  private def loadAsset(resourcePath: String): Option[CachedAsset] =
+    staticCache.getOrElseUpdate(
+      resourcePath, {
+        val stream = getClass.getResourceAsStream(resourcePath)
+        if stream == null then None
+        else
+          val bytes = stream.readAllBytes()
+          val crc   = new java.util.zip.CRC32()
+          crc.update(bytes)
+          Some(CachedAsset(bytes, "\"" + java.lang.Long.toHexString(crc.getValue) + "\""))
+      }
+    )
+
+  private def serveStatic(
+      dir: String,
+      file: String,
+      contentType: Header.ContentType,
+      req: Request
+  ): Response =
+    if !safeFileName.matches(file) then Response.notFound
+    else
+      loadAsset(s"/static/$dir/$file") match
+        case None => Response.notFound
+        case Some(asset) =>
+          val cacheHeaders = Headers(
+            contentType,
+            Header.Custom("ETag", asset.etag),
+            Header.Custom("Cache-Control", "public, max-age=3600, must-revalidate")
+          )
+          // Revalidazione: se l'ETag del client combacia, rispondiamo 304 senza corpo.
+          val ifNoneMatch = req.headers.get("If-None-Match")
+          if ifNoneMatch.contains(asset.etag) then
+            Response(status = Status.NotModified, headers = cacheHeaders)
+          else
+            Response(status = Status.Ok, headers = cacheHeaders, body = Body.fromArray(asset.bytes))
 
   private def okHtml(content: String): Response =
     Response(
@@ -43,17 +73,24 @@ object AppRoutes:
   val routes: Routes[PortfolioService, Nothing] =
     Routes(
       // ── Static files ────────────────────────────────────────────────────────
+      // ── Health check (leggero, per Render) ───────────────────────────────────
+      Method.GET / "healthz" ->
+        handler { (_: Request) =>
+          Response(status = Status.Ok, body = Body.fromString("ok"))
+        },
+
+      // ── Static files ────────────────────────────────────────────────────────
       Method.GET / "static" / "css" / string("file") ->
-        handler { (file: String, _: Request) =>
-          ZIO.attemptBlocking(serveStatic("css", file, Header.ContentType(MediaType.text.css))).orDie
+        handler { (file: String, req: Request) =>
+          ZIO
+            .attemptBlocking(serveStatic("css", file, Header.ContentType(MediaType.text.css), req))
+            .orDie
         },
       Method.GET / "static" / "js" / string("file") ->
-        handler { (file: String, _: Request) =>
-          ZIO.attemptBlocking(serveStatic(
-            "js",
-            file,
-            Header.ContentType(MediaType.application.`javascript`)
-          )).orDie
+        handler { (file: String, req: Request) =>
+          ZIO.attemptBlocking(
+            serveStatic("js", file, Header.ContentType(MediaType.application.`javascript`), req)
+          ).orDie
         },
 
       // ── Home ────────────────────────────────────────────────────────────────

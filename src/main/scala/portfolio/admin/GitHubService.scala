@@ -64,7 +64,12 @@ object GitHubServiceLive:
       new String(Base64.getDecoder.decode(s), "UTF-8")
 
     private def safeRequest(req: Request): Task[Response] =
-      ZIO.scoped(client.batched(req))
+      ZIO
+        .scoped(client.batched(req))
+        .timeoutFail(new RuntimeException("GitHub API timeout"))(20.seconds)
+
+    // Retry solo per le richieste idempotenti (GET): 2 tentativi extra a intervalli crescenti.
+    private val readRetry = Schedule.recurs(2) && Schedule.exponential(200.millis)
 
     private def parseGitHubFileResponse(body: String): Either[Throwable, GitHubFileResponse] =
       body.fromJson[GitHubFileResponse]
@@ -75,6 +80,7 @@ object GitHubServiceLive:
       val url      = s"$baseUrl${apiPath(s"/contents/$fullPath")}?ref=${AdminConfig.githubBranch}"
 
       safeRequest(Request.get(url).addHeaders(apiHeaders))
+        .retry(readRetry)
         .flatMap { response =>
           if !response.status.isSuccess then
             ZIO.fail(new RuntimeException(s"GitHub API error: ${response.status}"))
@@ -102,6 +108,7 @@ object GitHubServiceLive:
 
       val getSha: Task[Option[String]] =
         safeRequest(Request.get(s"$url?ref=${AdminConfig.githubBranch}").addHeaders(apiHeaders))
+          .retry(readRetry)
           .flatMap { resp =>
             if resp.status == Status.NotFound then ZIO.succeed(None)
             else if resp.status.isSuccess then
