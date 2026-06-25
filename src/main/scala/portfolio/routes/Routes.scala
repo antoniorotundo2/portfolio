@@ -107,6 +107,19 @@ object AppRoutes:
             serveStatic("js", file, Header.ContentType(MediaType.application.`javascript`), req)
           ).orDie
         },
+      Method.GET / "static" / "img" / string("file") ->
+        handler { (file: String, req: Request) =>
+          ZIO
+            .attemptBlocking {
+              val mediaType =
+                if file.endsWith(".png") then MediaType.image.png
+                else if file.endsWith(".jpg") || file.endsWith(".jpeg") then MediaType.image.jpeg
+                else if file.endsWith(".svg") then MediaType.image.`svg+xml`
+                else MediaType.application.`octet-stream`
+              serveStatic("img", file, Header.ContentType(mediaType), req)
+            }
+            .orDie
+        },
 
       // ── Home ────────────────────────────────────────────────────────────────
       Method.GET / "" ->
@@ -130,6 +143,20 @@ object AppRoutes:
             cfg      <- svc.getProjectsConfig
             projects <- svc.getProjects
           } yield okHtml(ProjectsView.render(layout, cfg, projects))
+        },
+
+      // ── Project detail ───────────────────────────────────────────────────────
+      Method.GET / "projects" / string("id") ->
+        handler { (id: String, _: Request) =>
+          for {
+            svc     <- ZIO.service[PortfolioService]
+            layout  <- svc.getLayout
+            cfg     <- svc.getProjectsConfig
+            nf      <- svc.getNotFoundConfig
+            project <- svc.getProject(id)
+          } yield project.fold(notFoundHtml(layout, nf))(p =>
+            okHtml(ProjectDetailView.render(layout, cfg, p))
+          )
         },
 
       // ── Blog list ────────────────────────────────────────────────────────────
