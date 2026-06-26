@@ -13,7 +13,11 @@ status: "archived"
 year: 2022
 ---
 
-A computer-vision **final challenge**: classify autonomous-driving images into **six categories** using *classic* computer vision — no neural networks. The classifier is written in **C# with Emgu.CV** (the .NET wrapper around OpenCV) and describes each image with just **four texture numbers** before handing them to a **K-Nearest-Neighbours** model.
+The **final challenge** of a Computer Vision & Pattern Recognition course — *Object Classification for Autonomous Driving*, run as an official **CodaLab competition**. The task: classify outdoor driving images into **six object classes** — *pedestrian, cyclist, car, truck, tram, tricycle* — using *classic* computer vision, no neural networks. The classifier is written in **C# with Emgu.CV** (the .NET wrapper around OpenCV) and describes each image with just **four texture numbers** before handing them to a **K-Nearest-Neighbours** model.
+
+## The challenge
+
+The competition provides **28,554 fully-labeled RGB images** — a **22,249**-image training set and a **6,305**-image test set — across the six classes. The data is **strongly imbalanced** (far more cars than pedestrians) and highly varied, with day- and night-time acquisitions, different cities and changing weather. The organisers kept **two separate leaderboards** — one for *hand-crafted feature* approaches and one for *neural networks* — both ranked by **Mean Class Accuracy (MCA)**. This solution deliberately took the **hand-crafted feature** route.
 
 ## Texture as a feature
 
@@ -49,11 +53,11 @@ knn.Train(new TrainData(tData, DataLayoutType.RowSample, tLab));
 
 ## Handling a heavily imbalanced dataset
 
-The ~22k-image training set is strongly skewed — one class held over **12,000** images while the rarest had under a thousand. Inverse-frequency **class weights** drive an on-the-fly **downsampling** of the dominant classes, keeping the per-class counts balanced without discarding the signal entirely.
+The training set is strongly skewed — the **car** class alone held over **12,000** images while the rarest had under a thousand. Inverse-frequency **class weights** drive an on-the-fly **downsampling** of the dominant classes, keeping the per-class counts balanced without discarding the signal entirely.
 
 ## Evaluation
 
-With six classes, global accuracy hides per-class failures, so the pipeline reports **precision, recall and F1 per class**, a full **6×6 confusion matrix**, and the **Mean Class Accuracy (MCA)** — far more honest on imbalanced data. The same pipeline finally runs over the challenge's evaluation set and writes a `submission.txt` of predictions.
+With six classes, global accuracy hides per-class failures, so the pipeline reports **precision, recall and F1 per class**, a full **6×6 confusion matrix**, and the **Mean Class Accuracy (MCA)** — the competition's official ranking metric, and far more honest on imbalanced data. The same pipeline finally runs over the challenge's evaluation set and writes a `submission.txt` for CodaLab submission.
 
 ## Takeaways
 
