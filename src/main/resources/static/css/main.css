@@ -516,6 +516,32 @@ section { padding: 5rem 0 0; }
 }
 .post-content pre code { background: none; padding: 0; color: var(--text-primary); }
 
+/* Tabelle (GFM) — leggibili sul tema scuro, con scroll orizzontale su viewport stretti */
+.post-content table {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 1.5rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+.post-content thead th {
+  color: var(--text-primary);
+  font-weight: 700;
+  text-align: left;
+  background: var(--bg-elevated);
+}
+.post-content th,
+.post-content td {
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.9rem;
+  white-space: nowrap;
+}
+.post-content tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.post-content tbody td strong { color: var(--accent); }
+
 .post-footer { margin-top: 3rem; padding-top: 2rem; border-top: 1px solid var(--border); }
 .back-link {
   font-size: 0.85rem;
