@@ -1,5 +1,5 @@
 ---
-id: "godot-prolog-agents"
+id: "polaris"
 title: "POLARIS"
 description: "Multi-agent system with declarative Prolog logic in real-time 3D simulations on Godot"
 tags:
