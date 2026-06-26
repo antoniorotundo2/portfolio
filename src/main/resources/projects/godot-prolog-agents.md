@@ -9,7 +9,6 @@ tags:
   - Cats Effect
   - WebSocket
   - Multi-Agent Systems
-githubUrl: "https://github.com/antoniorotundo2/godot-prolog-agents"
 status: "archived"
 year: 2026
 ---
