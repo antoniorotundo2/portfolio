@@ -22,7 +22,7 @@ year: 2023
 
 The system is organised in four layers: low-power **edge** sensor nodes, a **Wi-Fi gateway** that bridges them to the Internet, a **service** backend that ingests and stores the data, and a **web client** that visualises it.
 
-Chirp Air Station was a **multi-disciplinary university project**, developed across three exams — *Web Applications & Services*, *Distributed Systems* and *Project Management* — each adding a different lens: the web/IoT stack, the distributed architecture, and the planning and management process.
+Chirp Air Station was a **multi-disciplinary university project**, developed across four exams — *Web Applications & Services*, *Distributed Systems*, *Project Management* and *Smart City & Mobile Technologies* — each adding a different lens: the web/IoT stack, the distributed architecture, the planning and management process, and the smart-city angle of low-power autonomous nodes and city-scale environmental monitoring.
 
 ![System architecture](/static/img/cas_architecture.png)
 
