@@ -412,6 +412,64 @@ section { padding: 5rem 0 0; }
   border-color: var(--border-glow);
   background: var(--accent-dim);
 }
+
+/* Utility: nasconde un elemento (niente stili inline → CSP stretta). */
+.hidden { display: none; }
+
+/* ── Contact form ────────────────────────────────────────────────────────────── */
+.contact-form {
+  width: 100%;
+  max-width: 480px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.form-row { display: flex; flex-direction: column; gap: 0.4rem; }
+.form-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.form-input {
+  width: 100%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  box-sizing: border-box;
+  transition: border-color var(--transition);
+}
+.form-input:focus { outline: none; border-color: var(--accent); }
+.contact-textarea { resize: vertical; min-height: 6rem; }
+
+.form-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.form-consent input { margin-top: 0.2rem; accent-color: var(--accent); flex-shrink: 0; }
+.form-consent a { color: var(--accent); }
+
+.contact-status {
+  font-size: 0.85rem;
+  min-height: 1.2rem;
+}
+.contact-status.success { color: var(--accent); }
+.contact-status.error   { color: #ff6666; }
+
+.privacy-note {
+  max-width: 480px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
 .social-label { font-size: 0.8rem; }
 
 /* ── Page hero (inner pages) ─────────────────────────────────────────────────── */

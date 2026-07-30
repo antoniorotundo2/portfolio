@@ -118,9 +118,87 @@ object Layout:
         navbar(layout, currentPath),
         main(cls := "site-main")(content*),
         footer(layout),
-        script(src := "/static/js/main.js")
+        script(src := "/static/js/main.js"),
+        script(src := "/static/js/contact.js")
       )
     ).render
+
+// ── Contact form ─────────────────────────────────────────────────────────────
+
+object ContactForm:
+
+  // Testi legali/di stato tenuti letterali (non da CMS): non vanno editati con leggerezza.
+  private val privacyNote =
+    "Your name, email and message are sent directly to me by email solely to reply to you. " +
+      "They are not stored on this site, not tracked, and not shared with third parties. " +
+      "Legal basis: your consent (GDPR Art. 6(1)(a)). You may withdraw consent at any time " +
+      "by replying to my email and asking me to delete our exchange."
+
+  def render = frag(
+    form(id := "contact-form", cls := "contact-form")(
+      // Honeypot: invisibile e non raggiungibile via tab; i bot lo compilano, gli utenti no.
+      div(cls := "hidden")(
+        label(`for` := "website")("Website"),
+        input(
+          `type`       := "text",
+          id           := "website",
+          name         := "website",
+          tabindex     := "-1",
+          autocomplete := "off"
+        )
+      ),
+      div(cls := "form-row")(
+        label(cls := "form-label", `for` := "contact-name")("Name"),
+        input(
+          `type`       := "text",
+          id           := "contact-name",
+          name         := "name",
+          cls          := "form-input",
+          required     := true,
+          maxlength    := "100",
+          autocomplete := "name"
+        )
+      ),
+      div(cls := "form-row")(
+        label(cls := "form-label", `for` := "contact-email")("Email"),
+        input(
+          `type`       := "email",
+          id           := "contact-email",
+          name         := "email",
+          cls          := "form-input",
+          required     := true,
+          autocomplete := "email"
+        )
+      ),
+      div(cls := "form-row")(
+        label(cls := "form-label", `for` := "contact-message")("Message"),
+        textarea(
+          id        := "contact-message",
+          name      := "message",
+          cls       := "form-input contact-textarea",
+          required  := true,
+          maxlength := "5000",
+          rows      := "5"
+        )
+      ),
+      div(cls := "form-consent")(
+        input(`type` := "checkbox", id := "contact-consent", name := "consent", required := true),
+        label(`for` := "contact-consent")(
+          "I have read the ",
+          a(href := "#contact-privacy-note")("privacy note"),
+          " below and consent to my data being processed to receive a reply. *"
+        )
+      ),
+      button(`type` := "submit", cls := "btn btn-primary", id := "contact-submit")("Send message"),
+      div(
+        id                := "contact-status",
+        cls               := "contact-status",
+        attr("role")      := "status",
+        attr("aria-live") := "polite"
+      )
+    ),
+    p(id := "contact-privacy-note", cls := "privacy-note")(privacyNote)
+  )
 
 // ── Home page ─────────────────────────────────────────────────────────────────
 
@@ -206,9 +284,7 @@ object HomeView:
         span(cls := "section-tag")(home.sectionContact),
         h2(cls := "contact-title")(home.contactTitle),
         p(cls := "contact-sub")(home.contactSubtitle),
-        a(href := s"mailto:${profile.email}", cls := "btn btn-primary btn-lg")(
-          profile.email
-        ),
+        ContactForm.render,
         div(cls := "social-links")(
           profile.socials.map(s =>
             a(

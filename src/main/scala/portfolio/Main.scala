@@ -1,6 +1,6 @@
 package portfolio
 
-import portfolio.routes.AppRoutes
+import portfolio.routes.{AppRoutes, ContactRoutes}
 import portfolio.admin.{
   AdminRoutes,
   AdminService,
@@ -8,7 +8,7 @@ import portfolio.admin.{
   GitHubServiceLive,
   ContentServiceLive
 }
-import portfolio.services.PortfolioServiceLive
+import portfolio.services.{PortfolioServiceLive, ContactServiceLive}
 import zio.*
 import zio.http.*
 import zio.logging.*
@@ -58,7 +58,8 @@ object Main extends ZIOAppDefault:
       (for {
         _ <- sessionSweeper.forkDaemon
         allRoutes =
-          (AdminRoutes.routes ++ AppRoutes.routes) @@ securityHeaders @@ Middleware.requestLogging()
+          (AdminRoutes.routes ++ AppRoutes.routes ++ ContactRoutes.routes)
+            @@ securityHeaders @@ Middleware.requestLogging()
         _ <- Server.serve(allRoutes)
       } yield ()).provide(
         serverLayer,
@@ -66,5 +67,6 @@ object Main extends ZIOAppDefault:
         ZClient.default,
         AdminServiceLive.layer,
         GitHubServiceLive.layer,
-        ContentServiceLive.layer
+        ContentServiceLive.layer,
+        ContactServiceLive.layer
       )
