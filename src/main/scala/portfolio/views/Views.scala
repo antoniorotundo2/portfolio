@@ -138,7 +138,9 @@ object ContactForm:
       "Legal basis: your consent (GDPR Art. 6(1)(a)). You may withdraw consent at any time " +
       "by replying to my email and asking me to delete our exchange."
 
-  def render = frag(
+  // Contenitore unico: tiene form e nota privacy visivamente uniti, con un gap interno
+  // più stretto rispetto a quello (più ampio) usato tra le altre sezioni della pagina.
+  def render = div(cls := "contact-form-wrap")(
     form(id := "contact-form", cls := "contact-form")(
       // Honeypot: invisibile e non raggiungibile via tab; i bot lo compilano, gli utenti no.
       div(cls := "hidden")(
