@@ -422,7 +422,7 @@ section { padding: 5rem 0 0; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.15rem;
 }
 .contact-form {
   width: 100%;
