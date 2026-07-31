@@ -17,5 +17,6 @@ skills:
   - gRPC
 socials:
   - GitHub | https://github.com/antoniorotundo2 | github
+  - GitLab | https://gitlab.com/antonio.rotundo2 | gitlab
   - LinkedIn | https://linkedin.com/in/eng-antonio-rotundo | linkedin
 ---
