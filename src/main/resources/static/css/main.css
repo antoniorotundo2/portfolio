@@ -450,9 +450,14 @@ section { padding: 5rem 0 0; }
 .form-consent {
   display: flex;
   align-items: flex-start;
-  gap: 0.6rem;
+  gap: 0.7rem;
   font-size: 0.8rem;
   color: var(--text-secondary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
 }
 .form-consent input { margin-top: 0.2rem; accent-color: var(--accent); flex-shrink: 0; }
 .form-consent a { color: var(--accent); }
