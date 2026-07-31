@@ -419,19 +419,15 @@ section { padding: 5rem 0 0; }
 /* ── Contact form ────────────────────────────────────────────────────────────── */
 .contact-form-wrap {
   width: 100%;
-  max-width: 480px;
   display: flex;
   flex-direction: column;
-  gap: 1.1rem;
-  text-align: left;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 1.75rem;
-  box-sizing: border-box;
+  align-items: center;
+  gap: 0.4rem;
 }
 .contact-form {
   width: 100%;
+  max-width: 480px;
+  text-align: left;
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
@@ -476,11 +472,14 @@ section { padding: 5rem 0 0; }
 .contact-status.error   { color: #ff6666; }
 
 .privacy-note {
+  max-width: 480px;
   font-size: 0.75rem;
   color: var(--text-secondary);
   line-height: 1.6;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1rem;
 }
 .social-label { font-size: 0.8rem; }
 
